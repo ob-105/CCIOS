@@ -91,14 +91,17 @@ local function launchApp(m, app)
     local x = math.min(baseX + step * 2, math.max(1, screenW - w + 1))
     local y = math.min(baseY + step, math.max(1, screenH - 1 - h + 1))
     spawnCounts[app.id] = count + 1
-    m:launch(app.entry, app.name, x, y, w, h)
+    m:launch(app.entry, app.name, x, y, w, h, table.unpack(app.args or {}))
 end
 
 manager.onLaunchApp = launchApp
 
--- Lets any app (e.g. the File Explorer opening a .lua file) launch an
--- arbitrary program the same cascaded/clamped way the Start menu does,
--- without needing to duplicate that placement logic itself.
+-- Lets any app (e.g. the File Explorer opening a .lua file, or the Text
+-- Editor via Explorer's Edit action) launch an arbitrary program the
+-- same cascaded/clamped way the Start menu does, without needing to
+-- duplicate that placement logic itself. `app.args`, if given, is
+-- forwarded as extra arguments to the launched program (e.g. a file
+-- path for the Text Editor to open).
 _G.ccios.launch = function(app)
     launchApp(manager, app)
 end

@@ -1,0 +1,12 @@
+{
+    "id": "editor",
+    "name": "Text Editor",
+    "version": "0.1.0",
+    "author": "CCIOS",
+    "entry": "main.lua",
+    "description": "Edit plain text and Lua files.",
+    "window": {
+        "width": 54,
+        "height": 18
+    }
+}

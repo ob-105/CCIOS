@@ -180,8 +180,73 @@ choices:
   always lands in whichever folder the *focused* Explorer window has
   open — if Explorer isn't the focused window, it doesn't receive the
   event at all.
-- Non-`.lua` files and delete/rename/copy/move are explicitly **not**
-  handled yet (see below) — clicking one just shows a status message.
+- **The Menu button** (top-right of the window) opens a dropdown built
+  fresh each time from the currently-selected entry: a directory gets
+  `Open`; a `.lua` file gets `Run` and `Edit`; anything else gets just
+  `Edit`; everything gets `Copy`/`Cut`/`Delete`; `Paste` only appears
+  once something's on the clipboard. It's implemented the same way as
+  the WM's own Start menu (a button that toggles a positioned list,
+  click-away to dismiss) — there wasn't a reason to generalize that
+  pattern into `wm.lua` since only Explorer needs it so far.
+- **Clipboard**: `Copy`/`Cut` just remember `{path, name, isDir, mode}`
+  locally (no confirmation needed — nothing on disk changes yet). `Cut`
+  *does* confirm despite being non-destructive at that point, because
+  that's what was asked for; the actual move only happens at `Paste`,
+  via `fs.move`/`fs.copy` (both already handle directories recursively,
+  so Explorer doesn't reimplement that). `Paste` additionally confirms
+  if it would overwrite an existing file.
+- **`Edit`** opens any file — `.lua` or not — in the Text Editor app,
+  passing the path as a launch argument through `_G.ccios.launch`'s
+  `args` field (see below). This is how "open non-Lua files" is
+  implemented: not a viewer built into Explorer, just handing the file
+  to another app that already knows how to show text.
+- Rename and "new file/folder" are explicitly **not** implemented yet.
+
+## Confirmation dialogs (`dialog.lua`)
+
+`src/ccios/kernel/dialog.lua` is a small shared helper (`dofile`'d by
+an app, not part of the `_G.ccios` surface) with one function,
+`dialog.confirm(message)`, that draws a centered Yes/No box and blocks
+until answered (click, or Y/Enter/N/Escape). It can block like that
+because the calling app is itself just a coroutine the WM feeds events
+to (see "Core idea" above) — nesting another `os.pullEvent` loop inside
+a click handler is exactly as safe as CraftOS's own `read()` blocking
+the same way mid-program. The caller just needs to redraw its own UI
+afterwards, which File Explorer and the Text Editor already do every
+loop iteration regardless.
+
+This is currently used by File Explorer (Cut/Delete/overwrite-on-Paste)
+and the Text Editor (closing with unsaved changes). It's deliberately
+just a Yes/No box, not a general dialog/toast/notification system —
+extend it if a third real need shows up, not before.
+
+## Text Editor
+
+`src/ccios/apps/editor/main.lua` is a plain line-buffer editor (an
+array of strings, a `{row, col}` cursor, independent vertical/horizontal
+scroll) — nothing fancier like a rope or piece table, since CCIOS files
+are small enough that array operations on `table.insert`/`table.remove`
+are plenty fast. A few things worth knowing:
+
+- **Ctrl+S** is tracked manually: CraftOS reports Ctrl and S as
+  separate `key` events, so the app tracks whether `keys.leftCtrl` /
+  `keys.rightCtrl` is currently held (via `key`/`key_up`) and checks
+  that flag when it sees `keys.s`. This is the same pattern CraftOS's
+  own built-in `edit` program uses.
+- **Launched two ways**: from the Start menu with no arguments (blank,
+  untitled buffer — `Save` prompts for a path via a blocking `read()`,
+  same technique as `dialog.confirm`), or from Explorer's `Edit` action
+  with a file path as the first launch argument (`local path = ...`).
+- **Closing itself**: the in-app `Close` button confirms first if there
+  are unsaved changes (via `dialog.confirm`), then just lets its own
+  `while not closing do ... end` loop end and the file's top-level chunk
+  return — same "returning ends the coroutine, WM notices it's dead and
+  reaps the window" mechanism noted in Window lifecycle above, no
+  special "close myself" API needed. Note this is *different* from
+  clicking the window's title-bar `x`, which the WM handles directly and
+  unconditionally — closing that way skips the unsaved-changes check
+  entirely, since the WM has no way to ask an app "is it OK to close
+  you?" yet (see the deferred list below).
 
 ## What's intentionally deferred
 
@@ -193,7 +258,9 @@ choices:
 - Preventing duplicate launches (every click on a Start menu entry opens
   a new instance, same as clicking a taskbar icon in Windows without
   "single instance" apps)
-- File Explorer: opening non-`.lua` files (needs a text editor/viewer
-  app first), delete/rename/copy/move (needs a confirmation dialog
-  primitive first — not building one just to wire up a destructive
-  action with no "are you sure")
+- Letting the WM ask an app "OK to close?" before the title-bar `x`
+  closes it — right now that always closes unconditionally, bypassing
+  e.g. the Text Editor's unsaved-changes confirm (its own in-app Close
+  button is the only closing path that checks)
+- File Explorer: rename, new file/folder, multi-select
+- Text Editor: syntax highlighting, find/replace, undo

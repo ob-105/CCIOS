@@ -1,5 +1,57 @@
 # Dev log
 
+## Step 7 — Text Editor, Explorer Menu + clipboard (2026-09-06)
+
+Confirmed working in-game: steps 1-6.
+
+Built:
+
+- `src/ccios/kernel/dialog.lua` — shared modal Yes/No confirm box,
+  `dofile`'d by an app when it needs one (see docs/ARCHITECTURE.md for
+  why this could be a blocking call inside a click handler)
+- `src/ccios/apps/editor/` — fourth real app, a plain-text/Lua editor:
+  arrow-key/mouse cursor movement, Ctrl+S or a `[Save]` button to save
+  (prompts for a path if launched with none), `[Close]` button that
+  confirms first if there are unsaved changes
+- `_G.ccios.launch` now threads an optional `app.args` through to the
+  launched program (`boot.lua`'s `launchApp` already supported passing
+  extra args to `wm:launch`, just wasn't wired up yet) — this is how
+  Explorer hands the Text Editor a file path to open
+- File Explorer: a `Menu` button (top-right) opens a dropdown built from
+  the selected entry — `Open`/`Run`/`Edit`/`Copy`/`Cut`/`Delete`, plus
+  `Paste` when the clipboard has something. Implemented the same way as
+  the WM's own Start menu.
+- Clipboard: `Copy`/`Cut` (Cut confirms via the dialog, as asked for,
+  even though nothing on disk changes until `Paste`), `Paste` uses
+  `fs.move`/`fs.copy` and confirms before overwriting an existing file
+- `Edit` opens *any* file type in the Text Editor, not just `.lua` —
+  this is how non-Lua files became viewable/editable, per the request,
+  without building a separate viewer into Explorer itself
+
+### Things to specifically check when testing
+
+- [ ] Text Editor opens from the Start menu with a blank buffer, and
+      from Explorer's Menu > Edit with the file's actual content loaded
+- [ ] Typing, arrow keys, Home/End, Enter, Backspace, and Delete all
+      behave correctly, including at the start/end of lines (merging
+      with the previous/next line)
+- [ ] Ctrl+S saves; the `[Save]` button does the same; a brand-new
+      untitled buffer prompts for a filename first
+- [ ] `[Close]` with no changes closes immediately; with unsaved changes
+      it asks first, and "no" leaves the window open
+- [ ] Explorer's `Menu` button shows the right actions per entry type
+      (folder vs `.lua` file vs other file), and `Paste` only appears
+      once something's been copied/cut
+- [ ] Copy then Paste duplicates a file/folder; Cut then Paste moves it
+      (and Cut itself shows a confirm dialog first)
+- [ ] Delete confirms, then actually removes the file/folder and updates
+      the list
+- [ ] Pasting over an existing file/folder confirms before overwriting
+- [ ] Clicking Menu > Edit on a `.lua` file opens it in the Text Editor
+      (separate from Run, which still launches it as a program)
+- [ ] All of the above still work correctly on a mono (standard, non-
+      Advanced) screen — nothing here should error over color usage
+
 ## Step 6 — File Explorer (2026-09-06)
 
 Confirmed working in-game: steps 1-5.

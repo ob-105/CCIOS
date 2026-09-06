@@ -7,8 +7,8 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Steps 1-5 (window manager, multiple windows, Start menu, resizing, System Monitor) — tested in-game, working.**
-**Step 6 (File Explorer) — done, pending in-game testing.**
+**Steps 1-6 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer) — tested in-game, working.**
+**Step 7 (Text Editor + Explorer menu/clipboard) — done, pending in-game testing.**
 
 - Floating, draggable, closable, resizable windows with title bars
 - Multiple windows at once; focusing a window (by clicking it, or
@@ -23,11 +23,17 @@ Built one part at a time, bug-tested manually in-game after each step.
 - Apps are ordinary CraftOS programs (`term.*` / `os.pullEvent`) — no
   special API required to write one
 - "About CCIOS", "System Monitor" (disk usage, watchdog headroom,
-  memory, open windows, peripherals), and "File Explorer" apps, all in
-  the Start menu
+  memory, open windows, peripherals), "File Explorer", and "Text Editor"
+  apps, all in the Start menu
 - File Explorer: browse folders, double-click (or Enter) a `.lua` file
-  to launch it as a window, drag-and-drop a file onto the Minecraft
-  window to copy it into whatever folder is currently open
+  to run it, drag-and-drop a file onto the Minecraft window to copy it
+  into whatever folder is currently open, and a Menu button (top-right)
+  with contextual actions — Run/Edit/Copy/Cut/Delete/Paste — for the
+  selected file or folder. Cut, Delete, and pasting over an existing
+  file all confirm first via a shared modal dialog.
+- Text Editor: plain-text/Lua editing with save (Ctrl+S or a button),
+  opened from Explorer's Menu (any file type) or directly from the
+  Start menu (blank document)
 - Auto-updater: checks GitHub for a newer `manifest.json` on boot (asks
   before installing), plus a manual `update` shell command
 
@@ -74,6 +80,7 @@ src/
       boot.lua              -- kernel entry point: update check, then launches app(s)
       updater.lua           -- shared install/update logic (used by install.lua, update.lua, boot.lua)
       apps.lua               -- scans /ccios/apps for installed apps (feeds the Start menu)
+      dialog.lua              -- shared modal confirm-box helper (dofile'd by apps)
     apps/
       about/
         main.lua            -- About CCIOS app
@@ -83,6 +90,9 @@ src/
         manifest.json       -- app metadata
       explorer/
         main.lua            -- File Explorer app
+        manifest.json       -- app metadata
+      editor/
+        main.lua            -- Text Editor app
         manifest.json       -- app metadata
 docs/
   ARCHITECTURE.md
