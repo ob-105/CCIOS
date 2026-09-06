@@ -1,5 +1,41 @@
 # Dev log
 
+## Step 3 — Start menu (2026-09-06)
+
+Confirmed working in-game: steps 1-2.
+
+Built:
+
+- `src/ccios/kernel/apps.lua` — scans `/ccios/apps/*/manifest.json` and
+  returns the installed app list; nothing in the kernel hardcodes app
+  paths anymore
+- Taskbar `+` button replaced with a proper `Start` button + popup menu
+  listing installed apps (currently just "About CCIOS"); clicking an
+  entry launches it, cascaded like the old `+` button did
+- `boot.lua` now launches its two demo About windows through the same
+  `onLaunchApp` path the Start menu uses, instead of a separate
+  hardcoded spawn function
+
+Only one real app exists so the menu is a bit of a formality right now,
+but the plumbing (manifest discovery -> menu -> launch callback) is the
+same path an app-store install will use later, so there's nothing to
+redo when app #2 shows up.
+
+### Things to specifically check when testing
+
+- [ ] Clicking `Start` opens a menu listing "About CCIOS" above the
+      taskbar, without covering the taskbar itself
+- [ ] Clicking "About CCIOS" in the menu opens a new window and closes
+      the menu
+- [ ] Clicking `Start` again while the menu is open closes it without
+      launching anything
+- [ ] Clicking elsewhere (a window, empty desktop, a taskbar entry)
+      while the menu is open closes the menu AND still performs that
+      click normally (e.g. focuses the window you clicked)
+- [ ] Menu position/width stays sane on a small pocket-computer screen
+- [ ] Boots the same as before: two overlapping About windows already
+      open
+
 ## Step 2 — Multiple windows (2026-09-06)
 
 Confirmed working in-game: step 1 (window manager + About app, mono and

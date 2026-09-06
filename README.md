@@ -7,14 +7,16 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Step 1 (window manager + About app) — tested in-game, working.**
-**Step 2 (multiple windows) — done, pending in-game testing.**
+**Steps 1-2 (window manager, multiple windows) — tested in-game, working.**
+**Step 3 (Start menu) — done, pending in-game testing.**
 
 - Floating, draggable, closable windows with title bars
 - Multiple windows at once; focusing a window (by clicking it, or
-  spawning a new one) always draws it on top of the others
+  launching a new one) always draws it on top of the others
 - Taskbar with per-window entries (click to focus, click again to
-  minimize) and a `+` button to open another window on demand
+  minimize) and a Start button that opens a menu of installed apps
+- Installed apps are discovered at boot from `/ccios/apps/*/manifest.json`
+  — no hardcoded app list anywhere in the kernel
 - Works on color (Advanced) and mono (standard) screens
 - Apps are ordinary CraftOS programs (`term.*` / `os.pullEvent`) — no
   special API required to write one
@@ -64,6 +66,7 @@ src/
       wm.lua                -- window manager
       boot.lua              -- kernel entry point: update check, then launches app(s)
       updater.lua           -- shared install/update logic (used by install.lua, update.lua, boot.lua)
+      apps.lua               -- scans /ccios/apps for installed apps (feeds the Start menu)
     apps/
       about/
         main.lua            -- About CCIOS app

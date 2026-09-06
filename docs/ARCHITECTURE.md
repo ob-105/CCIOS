@@ -63,11 +63,34 @@ unmodified on both device tiers.
   launcher error dialog is a step-2 concern).
 - The WM's `run()` loop exits once no windows remain.
 
+## App discovery and the Start menu
+
+`src/ccios/kernel/apps.lua` scans `/ccios/apps/*/manifest.json` at boot
+and returns a list of `{id, name, entry, width, height}` — this is the
+same manifest format each app already ships (see
+`src/ccios/apps/about/manifest.json`). `boot.lua` hands that list to
+`manager.startMenuApps` and sets `manager.onLaunchApp = function(m, app)
+... end` to actually launch one.
+
+This keeps `wm.lua` itself app-agnostic: it doesn't know what a "app" is
+beyond `{id, name, entry, width, height}`, doesn't hardcode paths, and
+just calls back into `onLaunchApp` when the user picks something from
+the menu. Clicking the Start button toggles the menu; clicking an entry
+launches it and closes the menu; clicking anywhere else while it's open
+closes the menu and then still acts on whatever's underneath (a window,
+a taskbar entry) — same click-away behavior as a normal desktop.
+
+This is also the seam the future app store will hang off of: installing
+an app from the store just means writing a new `/ccios/apps/<id>/`
+folder with a `manifest.json`, and it shows up in the Start menu on the
+next boot with no other code changes.
+
 ## What's intentionally deferred
 
-- Start menu / app launcher (step 2)
 - Resizable windows (only draggable for now)
 - Surfacing app crash messages in the UI
 - Forwarding `term_resize` to individual apps
-- Multiple windows open simultaneously by default (the boot script only
-  opens the About app; the WM itself already supports launching more)
+- Pinning/searching in the Start menu, submenus, categories
+- Preventing duplicate launches (every click on a Start menu entry opens
+  a new instance, same as clicking a taskbar icon in Windows without
+  "single instance" apps)

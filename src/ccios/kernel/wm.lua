@@ -32,6 +32,15 @@ function wm.new(nativeTerm)
     self.running = false
     self.activeMouseWindow = nil -- window currently owning a mouse_click..mouse_up drag
     self.chromeDrag = nil        -- {window=, offsetX=, offsetY=} when dragging a titlebar
+
+    -- Start menu: set self.startMenuApps = {{id=,name=},...} and
+    -- self.onLaunchApp = function(manager, app) ... end externally
+    -- (boot.lua wires these up from the installed-apps list) to make
+    -- the menu do anything.
+    self.startMenuApps = {}
+    self.onLaunchApp = nil
+    self.startMenuOpen = false
+
     return self
 end
 
@@ -170,24 +179,22 @@ function wm:drawTaskbar()
     local bg = pickColor(self.isColor, colors.lightGray, colors.white)
     local fg = pickColor(self.isColor, colors.black, colors.black)
     fillRow(t, 1, self.taskbarY, self.screenW, bg)
-    t.setTextColor(fg)
+
+    local startBg = self.startMenuOpen
+        and pickColor(self.isColor, colors.white, colors.black)
+        or pickColor(self.isColor, colors.blue, colors.black)
+    local startFg = self.startMenuOpen
+        and pickColor(self.isColor, colors.black, colors.white)
+        or pickColor(self.isColor, colors.white, colors.white)
+    local startLabel = " Start "
     t.setCursorPos(1, self.taskbarY)
-    t.write(" CCIOS")
+    t.setBackgroundColor(startBg)
+    t.setTextColor(startFg)
+    t.write(startLabel)
+    self.startButtonX1 = 1
+    self.startButtonX2 = #startLabel
 
-    local cx = 8
-    if self.onNewWindow then
-        t.setCursorPos(cx, self.taskbarY)
-        t.setBackgroundColor(pickColor(self.isColor, colors.green, colors.black))
-        t.setTextColor(pickColor(self.isColor, colors.white, colors.white))
-        t.write(" + ")
-        self.newWindowX1 = cx
-        self.newWindowX2 = cx + 2
-        cx = cx + 4
-    else
-        self.newWindowX1 = nil
-        self.newWindowX2 = nil
-    end
-
+    local cx = self.startButtonX2 + 2
     for _, entry in ipairs(self.windows) do
         if cx < self.screenW then
             local isFocused = (entry == self:focused()) and not entry.minimized
@@ -200,6 +207,61 @@ function wm:drawTaskbar()
             entry.taskbarX2 = cx + #label - 1
             cx = cx + #label + 1
         end
+    end
+end
+
+-- Returns the index into self.startMenuApps under (px, py), or nil.
+function wm:startMenuItemAt(px, py)
+    if not self.startMenuOpen then
+        return nil
+    end
+    if px < self.menuX1 or px > self.menuX2 or py < self.menuY1 or py > self.menuY2 then
+        return nil
+    end
+    local index = py - self.menuY1 + 1
+    if index >= 1 and index <= #self.startMenuApps then
+        return index
+    end
+    return nil
+end
+
+function wm:drawStartMenu()
+    if not self.startMenuOpen then
+        return
+    end
+    local t = self.nativeTerm
+
+    local items = self.startMenuApps
+    local width = (#items == 0) and #"No apps installed" or 0
+    for _, app in ipairs(items) do
+        width = math.max(width, #app.name)
+    end
+    width = math.min(self.screenW, width + 2)
+    local height = math.max(1, #items)
+
+    local x = self.startButtonX1
+    local y = math.max(1, self.taskbarY - height)
+
+    self.menuX1, self.menuY1 = x, y
+    self.menuX2, self.menuY2 = x + width - 1, self.taskbarY - 1
+
+    local bg = pickColor(self.isColor, colors.gray, colors.white)
+    local fg = pickColor(self.isColor, colors.white, colors.black)
+
+    if #items == 0 then
+        fillRow(t, x, y, width, bg)
+        t.setTextColor(fg)
+        t.setCursorPos(x, y)
+        t.write((" No apps installed"):sub(1, width))
+        return
+    end
+
+    for i, app in ipairs(items) do
+        local rowY = y + i - 1
+        fillRow(t, x, rowY, width, bg)
+        t.setTextColor(fg)
+        t.setCursorPos(x, rowY)
+        t.write((" " .. app.name):sub(1, width))
     end
 end
 
@@ -218,6 +280,7 @@ function wm:draw()
     end
 
     self:drawTaskbar()
+    self:drawStartMenu()
     t.setCursorBlink(false)
 end
 
@@ -245,13 +308,26 @@ end
 -- ---------------------------------------------------------------------
 
 function wm:handleMouseClick(button, px, py)
-    if py == self.taskbarY then
-        if self.newWindowX1 and px >= self.newWindowX1 and px <= self.newWindowX2 then
-            if self.onNewWindow then
-                self.onNewWindow(self)
+    if py == self.taskbarY and px >= self.startButtonX1 and px <= self.startButtonX2 then
+        self.startMenuOpen = not self.startMenuOpen
+        return
+    end
+
+    if self.startMenuOpen then
+        local index = self:startMenuItemAt(px, py)
+        self.startMenuOpen = false
+        if index then
+            local app = self.startMenuApps[index]
+            if self.onLaunchApp then
+                self.onLaunchApp(self, app)
             end
             return
         end
+        -- click was outside the menu: fall through so it still acts on
+        -- whatever's underneath (a window, a taskbar entry, ...)
+    end
+
+    if py == self.taskbarY then
         for _, entry in ipairs(self.windows) do
             if entry.taskbarX1 and px >= entry.taskbarX1 and px <= entry.taskbarX2 then
                 if entry == self:focused() and not entry.minimized then

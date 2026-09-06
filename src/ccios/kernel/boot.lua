@@ -64,30 +64,35 @@ end
 local manager = wm.new(term.current())
 
 local screenW, screenH = term.current().getSize()
-local aboutW = math.min(36, screenW)
-local aboutH = math.min(12, screenH - 1) -- leave room for the taskbar
 
--- spawns another About window, cascading each new one down-right of the
+local appsOk, appsModule = pcall(dofile, CCIOS_ROOT .. "/kernel/apps.lua")
+local installedApps = appsOk and appsModule.discover(CCIOS_ROOT .. "/apps") or {}
+manager.startMenuApps = installedApps
+
+-- Launches an app, cascading each new instance of it down-right of the
 -- last so overlapping windows (and the topmost-drawn-last z-order) are
--- easy to see and test
-local spawnCount = 0
-local function spawnAbout()
-    local baseX = math.max(1, math.floor((screenW - aboutW) / 2) + 1)
-    local baseY = math.max(1, math.floor((screenH - 1 - aboutH) / 2) + 1)
-    local step = spawnCount % 6
-    local x = math.min(baseX + step * 2, math.max(1, screenW - aboutW + 1))
-    local y = math.min(baseY + step, math.max(1, screenH - 1 - aboutH + 1))
-    spawnCount = spawnCount + 1
-    manager:launch(
-        CCIOS_ROOT .. "/apps/about/main.lua",
-        "About CCIOS",
-        x, y, aboutW, aboutH
-    )
+-- easy to see and test. Wired up as the Start menu's launch callback.
+local spawnCounts = {}
+local function launchApp(m, app)
+    local baseX = math.max(1, math.floor((screenW - app.width) / 2) + 1)
+    local baseY = math.max(1, math.floor((screenH - 1 - app.height) / 2) + 1)
+    local count = spawnCounts[app.id] or 0
+    local step = count % 6
+    local x = math.min(baseX + step * 2, math.max(1, screenW - app.width + 1))
+    local y = math.min(baseY + step, math.max(1, screenH - 1 - app.height + 1))
+    spawnCounts[app.id] = count + 1
+    m:launch(app.entry, app.name, x, y, app.width, app.height)
 end
 
-manager.onNewWindow = spawnAbout
+manager.onLaunchApp = launchApp
 
-spawnAbout()
-spawnAbout()
+-- boot straight into a couple of About windows so multi-window overlap
+-- is visible immediately, same as before the Start menu existed
+for _, app in ipairs(installedApps) do
+    if app.id == "about" then
+        launchApp(manager, app)
+        launchApp(manager, app)
+    end
+end
 
 manager:run()
