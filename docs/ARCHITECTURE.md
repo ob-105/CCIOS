@@ -105,6 +105,40 @@ doesn't rely on CraftOS's own `term_resize` event at all — the WM
 already drives each app's coroutine directly, so it just delivers the
 event itself the moment it changes the window's buffer size.
 
+## Maximize/restore
+
+A second title-bar button (`o`, just left of the close `x`) calls
+`wm:toggleMaximize(entry)`, which stashes the window's current
+`x/y/w/h` in `entry.restoreX/Y/W/H`, resizes it to fill the screen down
+to the taskbar, and flips `entry.maximized`; clicking it again restores
+the stashed bounds. It reuses the exact same `win.reposition` +
+`term_resize` notification the resize handle uses — maximizing is really
+just "resize to the full screen" from the app's point of view.
+
+Manually dragging the title bar or the resize handle clears
+`entry.maximized` first, so a window doesn't stay "logically maximized"
+after being moved/resized by hand — otherwise clicking the maximize
+button afterward would restore to the stale pre-maximize size instead of
+un-maximizing the size you actually meant to keep. There's deliberately
+no drag-to-edge-to-snap gesture: an accidental snap-to-maximize while
+dragging near the top of the screen was called out as a specific thing
+to avoid, and a real "is this an intentional snap or did the mouse just
+pass through that pixel" gesture needs more care (a preview outline, a
+release-to-commit threshold) than this pass covers — the button is an
+unambiguous, deliberate action instead.
+
+## Taskbar clock
+
+`wm:run()` starts its own `os.startTimer(1)`, re-armed every time it
+fires, purely so the WM's loop wakes up and redraws roughly once a
+second even when nothing else is happening — otherwise the clock
+(`os.date("%H:%M")`, real time, drawn last in `drawTaskbar` so it always
+sits on top of anything that would otherwise run into its space) would
+only update whenever some other event happened to occur. This timer
+event flows through `dispatch()` like any other (broadcast to every
+window) rather than being special-cased out — harmless, since no app's
+own timer id will ever match it.
+
 ## The `_G.ccios` surface
 
 There isn't a formal kernel API yet, but apps that need to know
@@ -219,17 +253,29 @@ choices:
   open — if Explorer isn't the focused window, it doesn't receive the
   event at all.
 - **The Menu button** (top-right of the window, hidden in Save As picker
-  mode — see below) opens a dropdown built fresh each time from the
-  currently-selected entry: a directory gets `Open`; a `.lua` file gets
-  `Run` and `Edit`; anything else gets just `Edit`; everything gets
+  mode — see below) and **right-click** both open the same dropdown,
+  via a shared `openMenu(items, anchorX, anchorY, alignRight)` /
+  `buildMenuItems(targetIndex)` pair — `targetIndex` is the
+  currently-selected entry for the Menu button, or whatever's under the
+  cursor for a right-click (`nil` if you right-click empty list space,
+  which just gets you `Paste`/`New File`/`New Folder` — nothing
+  entry-specific). A directory gets `Open`; a `.lua` file gets `Run` and
+  `Edit`; anything else gets just `Edit`; everything gets
   `Copy`/`Cut`/`Delete`; `Paste` only appears once something's on the
-  clipboard; `New File`/`New Folder` are always there regardless of
-  selection (they prompt for a name via a blocking `read()`, same
-  technique as the Save As prompt below, and act on `currentPath`, not
-  the selected entry). It's implemented the same way as the WM's own
-  Start menu (a button that toggles a positioned list, click-away to
-  dismiss) — there wasn't a reason to generalize that pattern into
-  `wm.lua` since only Explorer needs it so far.
+  clipboard; `New File`/`New Folder` are always there (they prompt for a
+  name via a blocking `read()`, same technique as the Save As prompt
+  below, and act on `currentPath`, not the selected entry). Right-click
+  is just CC's ordinary `mouse_click` event with `button == 2` — nothing
+  special had to be added to `wm.lua` for it, since that button value
+  was already being forwarded to every window's content clicks from the
+  start; Explorer just hadn't been reading it. `openMenu` positions the
+  dropdown at its anchor point (right-aligned below the Menu button, or
+  top-left at the click point for a right-click), flipping/clamping to
+  stay on screen either way. This whole pattern (button toggles a
+  positioned list, click-away dismisses) is the same one the WM's own
+  Start menu uses — there wasn't a reason to generalize it into `wm.lua`
+  itself since only Explorer needs it so far.
+- Middle-click (`button == 3`) isn't given any meaning.
 - **Clipboard**: `Copy`/`Cut` just remember `{path, name, isDir, mode}`
   locally (no confirmation needed — nothing on disk changes yet). `Cut`
   *does* confirm despite being non-destructive at that point, because

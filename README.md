@@ -7,18 +7,21 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Steps 1-8 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor, New File/Save As picker) — tested in-game, working.**
-**Step 9 (configurable close button) — done, pending in-game testing.**
+**Steps 1-9 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor, New File/Save As picker, configurable close button) — tested in-game, working.**
+**Step 10 (right-click menus, taskbar clock, maximize) — done, pending in-game testing.**
 
-- Floating, draggable, closable, resizable windows with title bars
+- Floating, draggable, closable, resizable, maximizable windows with
+  title bars
 - Multiple windows at once; focusing a window (by clicking it, or
   launching a new one) always draws it on top of the others
 - Taskbar with per-window entries (click to focus, click again to
-  minimize) and a Start button that opens a menu of installed apps
+  minimize), a Start button that opens a menu of installed apps, and a
+  live clock
 - Installed apps are discovered at boot from `/ccios/apps/*/manifest.json`
   — no hardcoded app list anywhere in the kernel
-- Drag a window's bottom-right corner (`\`) to resize it; apps get a
-  `term_resize` event and can redraw at the new size
+- Drag a window's bottom-right corner (`\`) to resize it, or click the
+  `o` button on its title bar to maximize/restore; apps get a
+  `term_resize` event either way and can redraw at the new size
 - Works on color (Advanced) and mono (standard) screens
 - Apps are ordinary CraftOS programs (`term.*` / `os.pullEvent`) — no
   special API required to write one
@@ -27,10 +30,11 @@ Built one part at a time, bug-tested manually in-game after each step.
   apps, all in the Start menu
 - File Explorer: browse folders, double-click (or Enter) a `.lua` file
   to run it, drag-and-drop a file onto the Minecraft window to copy it
-  into whatever folder is currently open, and a Menu button (top-right)
-  with contextual actions — Run/Edit/Copy/Cut/Delete/Paste/New
-  File/New Folder. Cut, Delete, and pasting over an existing file all
-  confirm first via a shared modal dialog.
+  into whatever folder is currently open, and contextual actions —
+  Run/Edit/Copy/Cut/Delete/Paste/New File/New Folder — from either the
+  Menu button (top-right) or right-clicking a file/folder (or empty
+  space, for Paste/New). Cut, Delete, and pasting over an existing file
+  all confirm first via a shared modal dialog.
 - Text Editor: plain-text/Lua editing with save (Ctrl+S or a button),
   opened from Explorer's Menu (any file type) or directly from the
   Start menu (blank document). Saving a document with no path yet opens

@@ -2,12 +2,13 @@
 -- A normal CraftOS program (see docs/ARCHITECTURE.md). Browses the
 -- filesystem, launches .lua files as windows via _G.ccios.launch (the
 -- same cascaded/clamped placement the Start menu uses), opens any file
--- in the Text Editor via the Menu dropdown, supports copy/cut/paste,
--- delete, new file/folder (cut, delete, and overwriting all confirm
--- first via the shared dialog helper), accepts files dragged onto the
--- Minecraft window (the "file_transfer" event) into whatever directory
--- is currently open, and can run as a "Save As" picker for the Text
--- Editor (see the "Save As picker mode" section below).
+-- in the Text Editor, supports copy/cut/paste, delete, new file/folder
+-- (cut, delete, and overwriting all confirm first via the shared dialog
+-- helper) via the Menu button or a right-click context menu on an
+-- entry (or empty list space, for Paste/New), accepts files dragged
+-- onto the Minecraft window (the "file_transfer" event) into whatever
+-- directory is currently open, and can run as a "Save As" picker for
+-- the Text Editor (see the "Save As picker mode" section below).
 
 local EDITOR_ENTRY = "/ccios/apps/editor/main.lua"
 
@@ -115,6 +116,7 @@ local closing = false
 
 local menuOpen = false
 local menuItems = {}
+local menuAnchorX, menuAnchorY, menuAlignRight
 local menuButtonX1, menuButtonX2
 local saveBtnX1, saveBtnX2, cancelBtnX1, cancelBtnX2
 local menuX1, menuY1, menuX2, menuY2
@@ -319,14 +321,19 @@ local function doNewFolder()
     status = "Created folder " .. name
 end
 
-local function buildMenuItems()
+-- Builds the action list for `targetIndex` (the entry that was right-
+-- clicked, or the currently-selected one for the Menu button) - or just
+-- the entry-agnostic actions (Paste/New) when targetIndex is nil, i.e.
+-- a right-click on empty list space.
+local function buildMenuItems(targetIndex)
     local items = {}
-    local e = selected >= 1 and entries[selected] or nil
+    local e = targetIndex and targetIndex >= 1 and entries[targetIndex] or nil
 
     if e and not e.isParent then
         local full = joinPath(currentPath, e.name)
+        local idx = targetIndex
         if e.isDir then
-            table.insert(items, { label = "Open", action = function() openEntry(selected) end })
+            table.insert(items, { label = "Open", action = function() openEntry(idx) end })
         elseif e.name:match("%.lua$") then
             table.insert(items, { label = "Run", action = function() runLuaFile(full, e.name) end })
         end
@@ -414,23 +421,41 @@ end
 -- Drawing
 -- ---------------------------------------------------------------------
 
+-- Opens the dropdown at a given anchor point. When alignRight is true,
+-- the anchor is the menu's *right* edge (used for the Menu button, so
+-- it hangs below-left of it); otherwise the anchor is the menu's
+-- top-left corner (used for right-click, so it opens right where you
+-- clicked). Position is clamped to stay on screen either way.
+local function openMenu(items, anchorX, anchorY, alignRight)
+    menuItems = items
+    menuAnchorX, menuAnchorY, menuAlignRight = anchorX, anchorY, alignRight
+    menuOpen = true
+end
+
 local function drawMenu()
     if not menuOpen then
         return
     end
-    local w = select(1, term.getSize())
+    local w, h = term.getSize()
 
     local width = 0
     for _, item in ipairs(menuItems) do
         width = math.max(width, #item.label)
     end
     width = math.min(w, width + 2)
+    local height = math.max(1, #menuItems)
 
-    local x = math.max(1, menuButtonX2 - width + 1)
-    local y = 2
+    local x = menuAlignRight and (menuAnchorX - width + 1) or menuAnchorX
+    x = math.max(1, math.min(x, w - width + 1))
+
+    local y = menuAnchorY
+    if y + height - 1 > h then
+        y = math.max(1, menuAnchorY - height) -- flip upward if it wouldn't fit below
+    end
+    y = math.max(1, math.min(y, h - height + 1))
 
     menuX1, menuY1 = x, y
-    menuX2, menuY2 = x + width - 1, y + #menuItems - 1
+    menuX2, menuY2 = x + width - 1, y + height - 1
 
     for i, item in ipairs(menuItems) do
         local ry = y + i - 1
@@ -528,7 +553,7 @@ local function draw()
     elseif pickerMode == "save" then
         help = "Click a file to select it, or click Save to name a new one"
     else
-        help = "Enter/dbl-click: open  Menu: actions  drag a file in to copy it here"
+        help = "Enter/dbl-click: open  Right-click/Menu: actions  drag a file in to copy it here"
     end
     term.write(help:sub(1, w))
     term.setTextColor(colors.white)
@@ -540,8 +565,11 @@ end
 -- Input
 -- ---------------------------------------------------------------------
 
-local function handleClick(px, py)
+local function handleClick(button, px, py)
     if pickerMode == "save" and py == 1 then
+        if button ~= 1 then
+            return
+        end
         if px >= saveBtnX1 and px <= saveBtnX2 then
             local name = promptText("Save as: ", lastSelectedFileName or pickerSuggestedName or "")
             finishSave(name)
@@ -552,18 +580,20 @@ local function handleClick(px, py)
     end
 
     if pickerMode ~= "save" and py == 1 and menuButtonX1 and px >= menuButtonX1 and px <= menuButtonX2 then
+        if button ~= 1 then
+            return
+        end
         if menuOpen then
             menuOpen = false
         else
-            menuItems = buildMenuItems()
-            menuOpen = true
+            openMenu(buildMenuItems(selected), menuButtonX2, 2, true)
         end
         return
     end
 
     if menuOpen then
         menuOpen = false
-        if px >= menuX1 and px <= menuX2 and py >= menuY1 and py <= menuY2 then
+        if button == 1 and px >= menuX1 and px <= menuX2 and py >= menuY1 and py <= menuY2 then
             local item = menuItems[py - menuY1 + 1]
             if item and item.action then
                 item.action()
@@ -578,7 +608,24 @@ local function handleClick(px, py)
     end
     local index = scroll + (py - LIST_TOP + 1)
     local e = entries[index]
-    if not e then
+
+    -- right-click: context menu for the entry under the cursor, or just
+    -- the general actions (Paste/New) if it's over empty list space.
+    -- Not offered in Save As picker mode - there's nothing to act on.
+    if button == 2 then
+        if pickerMode == "save" then
+            return
+        end
+        if e then
+            selected = index
+        end
+        status = nil
+        lastClick = nil
+        openMenu(buildMenuItems(e and index or nil), px, py, false)
+        return
+    end
+
+    if button ~= 1 or not e then
         return
     end
 
@@ -669,7 +716,7 @@ while not closing do
     local event, p1, p2, p3 = os.pullEvent()
 
     if event == "mouse_click" then
-        handleClick(p2, p3)
+        handleClick(p1, p2, p3)
     elseif event == "key" then
         handleKey(p1)
     elseif event == "file_transfer" then

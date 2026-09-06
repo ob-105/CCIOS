@@ -1,5 +1,55 @@
 # Dev log
 
+## Step 10 — Right-click menus, taskbar clock, maximize (2026-09-06)
+
+Confirmed working in-game: steps 1-9.
+
+"Make it feel more like Windows" grab-bag, minus drag-to-edge snapping
+(explicitly asked to skip unless an accidental-trigger-proof version
+could be guaranteed - a real snap gesture needs a preview outline and a
+release-to-commit threshold to avoid exactly that, which is more than
+this pass covers, so it's skipped rather than shipped half-safe).
+
+Built:
+
+- File Explorer: right-click (`button == 2` on `mouse_click`, which
+  turns out CC has supported this whole time - it was already being
+  forwarded by `wm.lua`, just never read) opens the same context menu
+  the Menu button does, positioned at the cursor instead of anchored to
+  the button. Right-clicking empty list space offers Paste/New File/New
+  Folder without file-specific actions.
+- Taskbar clock (`os.date("%H:%M")`, real time), bottom-right. Needed
+  `wm:run()` to grow its own re-arming `os.startTimer(1)` so the WM
+  redraws roughly once a second even with no other activity - previously
+  it only ever redrew in response to some event happening.
+- Maximize/restore button (`o`) on every title bar, next to close.
+  Fills to the screen size (down to the taskbar) and back, reusing the
+  same `term_resize`-notification mechanism the resize handle already
+  used. Manually dragging or resizing a maximized window un-maximizes it
+  first, so the maximize button doesn't restore to a stale size
+  afterward.
+
+### Things to specifically check when testing
+
+- [ ] Right-clicking a file/folder in Explorer opens a context menu at
+      the cursor (not jumping to the top-right like the Menu button)
+- [ ] Right-clicking empty space in the file list opens a menu with just
+      Paste (if applicable) and New File/New Folder
+- [ ] The right-click menu's actions work identically to the same
+      actions via the Menu button
+- [ ] Right-click is NOT offered in the Save As picker
+- [ ] Clock is visible, correct, and keeps ticking forward even if you
+      don't touch anything for a while
+- [ ] Clock never gets overwritten/corrupted by a long window title in
+      the taskbar
+- [ ] Clicking `o` maximizes a window to fill the screen (not covering
+      the taskbar); clicking it again restores the original size/position
+- [ ] Dragging a maximized window's title bar (or its resize handle)
+      un-maximizes it at the size/position you end up at, rather than
+      snapping back to the pre-maximize size later
+- [ ] All of the above still work on a mono (standard) screen and on a
+      pocket computer's small screen
+
 ## Step 9 — Configurable close button (2026-09-06)
 
 Confirmed working in-game: steps 1-8.

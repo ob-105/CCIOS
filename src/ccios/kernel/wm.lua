@@ -95,6 +95,7 @@ function wm:launch(path, title, x, y, w, h, ...)
         -- actually close (e.g. to confirm unsaved changes first). See
         -- docs/ARCHITECTURE.md.
         customClose = false,
+        maximized = false, -- see wm:toggleMaximize; restoreX/Y/W/H set when true
         co = coroutine.create(function()
             fn(table.unpack(args))
         end),
@@ -196,11 +197,17 @@ function wm:drawWindowChrome(entry, isFocused)
     t.setTextColor(titleFg)
     t.setCursorPos(entry.x + 1, entry.y)
     local label = entry.title
-    local maxLabelW = entry.w - 3
+    local maxLabelW = entry.w - 4 -- leaves room for the maximize + close buttons
     if #label > maxLabelW then
         label = label:sub(1, math.max(0, maxLabelW))
     end
     t.write(label)
+
+    -- maximize/restore button
+    t.setCursorPos(entry.x + entry.w - 2, entry.y)
+    t.setBackgroundColor(titleBg)
+    t.setTextColor(titleFg)
+    t.write("o")
 
     -- close button
     t.setCursorPos(entry.x + entry.w - 1, entry.y)
@@ -251,6 +258,15 @@ function wm:drawTaskbar()
             cx = cx + #label + 1
         end
     end
+
+    -- clock, drawn last so it always stays on top of anything that
+    -- would otherwise overflow into its space
+    local clockText = " " .. os.date("%H:%M")
+    local clockX = math.max(1, self.screenW - #clockText + 1)
+    t.setCursorPos(clockX, self.taskbarY)
+    t.setBackgroundColor(bg)
+    t.setTextColor(fg)
+    t.write(clockText)
 end
 
 -- Returns the index into self.startMenuApps under (px, py), or nil.
@@ -329,6 +345,27 @@ function wm:draw()
     t.setCursorBlink(false)
 end
 
+-- Fills the screen (above the taskbar) if not already maximized, or
+-- restores the size/position it had before, if it is.
+function wm:toggleMaximize(entry)
+    if entry.maximized then
+        entry.x, entry.y = entry.restoreX, entry.restoreY
+        entry.w, entry.h = entry.restoreW, entry.restoreH
+        entry.maximized = false
+    else
+        entry.restoreX, entry.restoreY = entry.x, entry.y
+        entry.restoreW, entry.restoreH = entry.w, entry.h
+        entry.x, entry.y = 1, 1
+        entry.w = self.screenW
+        entry.h = self.taskbarY - 1
+        entry.maximized = true
+    end
+    entry.win.reposition(entry.x, entry.y + 1, entry.w, math.max(1, entry.h - 1))
+    if matchesFilter(entry, "term_resize") then
+        self:resumeWindow(entry, "term_resize")
+    end
+end
+
 -- ---------------------------------------------------------------------
 -- Hit testing
 -- ---------------------------------------------------------------------
@@ -405,13 +442,17 @@ function wm:handleMouseClick(button, px, py)
             else
                 self:closeWindow(entry)
             end
+        elseif px == entry.x + entry.w - 2 then
+            self:toggleMaximize(entry)
         else
+            entry.maximized = false -- dragging a maximized window un-maximizes it first
             self.chromeDrag = { entry = entry, offsetX = px - entry.x, offsetY = py - entry.y }
         end
         return
     end
 
     if px == entry.x + entry.w - 1 and py == entry.y + entry.h - 1 then
+        entry.maximized = false
         self.resizeDrag = {
             entry = entry,
             startW = entry.w, startH = entry.h,
@@ -560,11 +601,21 @@ function wm:run()
     self.running = true
     self:draw()
 
+    -- keeps the taskbar clock ticking even when nothing else is
+    -- happening; re-armed each time it fires. Also flows through
+    -- dispatch() like any other event (harmless - no app's own timer id
+    -- will match this one).
+    local clockTimer = os.startTimer(1)
+
     while self.running do
         if #self.windows == 0 then
             break
         end
         local event, a, b, c, d = os.pullEventRaw()
+
+        if event == "timer" and a == clockTimer then
+            clockTimer = os.startTimer(1)
+        end
 
         local burstStart = os.clock()
         self:dispatch(event, a, b, c, d)
