@@ -31,7 +31,7 @@ local function draw()
     end
 
     local lines = {
-        "Version    : 0.1.0 (step 1 - window manager)",
+        "Version    : 0.1.0",
         "Device     : " .. deviceKind .. (isColor and " (advanced)" or " (standard)"),
         "Computer ID: " .. tostring(id),
         "Label      : " .. label,

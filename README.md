@@ -7,14 +7,18 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Step 1: Window Manager — done, pending in-game testing.**
+**Step 1 (window manager + About app) — tested in-game, working.**
+**Step 2 (multiple windows) — done, pending in-game testing.**
 
 - Floating, draggable, closable windows with title bars
-- Taskbar with per-window entries (click to focus, click again to minimize)
+- Multiple windows at once; focusing a window (by clicking it, or
+  spawning a new one) always draws it on top of the others
+- Taskbar with per-window entries (click to focus, click again to
+  minimize) and a `+` button to open another window on demand
 - Works on color (Advanced) and mono (standard) screens
 - Apps are ordinary CraftOS programs (`term.*` / `os.pullEvent`) — no
   special API required to write one
-- "About CCIOS" app running as the first window
+- "About CCIOS" app running as the first window(s)
 - Auto-updater: checks GitHub for a newer `manifest.json` on boot (asks
   before installing), plus a manual `update` shell command
 
@@ -28,7 +32,7 @@ Requires the `http` API to be enabled on the server/config
 
 On a Computer or Pocket Computer:
 
-```
+```text
 wget run https://raw.githubusercontent.com/ob-105/CCIOS/main/install.lua
 ```
 
@@ -40,7 +44,7 @@ CCIOS checks GitHub for a newer version each boot and asks before
 installing (toggle with `settings.set("ccios.autoUpdateCheck", false)`
 then `settings.save()`). To check on demand, run:
 
-```
+```text
 update
 ```
 

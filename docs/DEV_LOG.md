@@ -1,5 +1,38 @@
 # Dev log
 
+## Step 2 — Multiple windows (2026-09-06)
+
+Confirmed working in-game: step 1 (window manager + About app, mono and
+color, standard and pocket computers).
+
+Built:
+
+- Taskbar `+` button (`wm.onNewWindow` callback) that spawns another
+  window on demand; `boot.lua` wires it to open more About windows,
+  cascaded diagonally so overlaps are obvious
+- Boots with two About windows open already, so overlap is visible
+  immediately without needing to click anything
+
+The window manager already drew windows back-to-front in z-order and
+moved a window to the top of that order on focus (click, or on launch) —
+step 1 just never had more than one window to prove it with. No change
+needed there; this step is really "give it something to overlap."
+
+### Things to specifically check when testing
+
+- [ ] Boots with two overlapping About windows; the second one (topmost)
+      visibly covers part of the first
+- [ ] Clicking a partially-hidden window (on its visible sliver) brings
+      it to front and covers the other one instead
+- [ ] Taskbar `+` button spawns another window, cascaded to a new
+      position, without covering the taskbar itself
+- [ ] Taskbar entries for all open windows are clickable and correctly
+      focus/minimize the right one once there are 3+ windows
+- [ ] Closing the topmost window reveals the one beneath it correctly
+      (no leftover visual garbage from the closed window)
+- [ ] Dragging one window over another still redraws correctly (no
+      stale pixels left behind at the old position)
+
 ## Step 1 — Window manager + About app (2026-09-06)
 
 Built:

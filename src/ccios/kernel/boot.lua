@@ -66,13 +66,28 @@ local manager = wm.new(term.current())
 local screenW, screenH = term.current().getSize()
 local aboutW = math.min(36, screenW)
 local aboutH = math.min(12, screenH - 1) -- leave room for the taskbar
-local aboutX = math.max(1, math.floor((screenW - aboutW) / 2) + 1)
-local aboutY = math.max(1, math.floor((screenH - 1 - aboutH) / 2) + 1)
 
-manager:launch(
-    CCIOS_ROOT .. "/apps/about/main.lua",
-    "About CCIOS",
-    aboutX, aboutY, aboutW, aboutH
-)
+-- spawns another About window, cascading each new one down-right of the
+-- last so overlapping windows (and the topmost-drawn-last z-order) are
+-- easy to see and test
+local spawnCount = 0
+local function spawnAbout()
+    local baseX = math.max(1, math.floor((screenW - aboutW) / 2) + 1)
+    local baseY = math.max(1, math.floor((screenH - 1 - aboutH) / 2) + 1)
+    local step = spawnCount % 6
+    local x = math.min(baseX + step * 2, math.max(1, screenW - aboutW + 1))
+    local y = math.min(baseY + step, math.max(1, screenH - 1 - aboutH + 1))
+    spawnCount = spawnCount + 1
+    manager:launch(
+        CCIOS_ROOT .. "/apps/about/main.lua",
+        "About CCIOS",
+        x, y, aboutW, aboutH
+    )
+end
+
+manager.onNewWindow = spawnAbout
+
+spawnAbout()
+spawnAbout()
 
 manager:run()

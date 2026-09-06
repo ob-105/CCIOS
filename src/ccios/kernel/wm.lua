@@ -174,7 +174,20 @@ function wm:drawTaskbar()
     t.setCursorPos(1, self.taskbarY)
     t.write(" CCIOS")
 
-    local cx = 9
+    local cx = 8
+    if self.onNewWindow then
+        t.setCursorPos(cx, self.taskbarY)
+        t.setBackgroundColor(pickColor(self.isColor, colors.green, colors.black))
+        t.setTextColor(pickColor(self.isColor, colors.white, colors.white))
+        t.write(" + ")
+        self.newWindowX1 = cx
+        self.newWindowX2 = cx + 2
+        cx = cx + 4
+    else
+        self.newWindowX1 = nil
+        self.newWindowX2 = nil
+    end
+
     for _, entry in ipairs(self.windows) do
         if cx < self.screenW then
             local isFocused = (entry == self:focused()) and not entry.minimized
@@ -233,6 +246,12 @@ end
 
 function wm:handleMouseClick(button, px, py)
     if py == self.taskbarY then
+        if self.newWindowX1 and px >= self.newWindowX1 and px <= self.newWindowX2 then
+            if self.onNewWindow then
+                self.onNewWindow(self)
+            end
+            return
+        end
         for _, entry in ipairs(self.windows) do
             if entry.taskbarX1 and px >= entry.taskbarX1 and px <= entry.taskbarX2 then
                 if entry == self:focused() and not entry.minimized then

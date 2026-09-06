@@ -1,5 +1,5 @@
 {
-    "version": "0.1.0",
+    "version": "0.2.0",
     "files": [
         { "src": "src/startup.lua",                  "dest": "/startup.lua" },
         { "src": "src/update.lua",                   "dest": "/update.lua" },
