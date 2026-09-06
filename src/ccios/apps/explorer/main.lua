@@ -20,6 +20,14 @@ if not dialogOk then
     dialog = nil
 end
 
+-- In Save As picker mode, the title-bar [x] should act like Cancel -
+-- otherwise closing it that way would leave the waiting Text Editor
+-- stuck forever (see "Save As picker mode" below). Ordinary browsing
+-- windows keep the default instant-close behavior.
+if pickerMode == "save" and _G.ccios and _G.ccios.wm and _G.ccios.wm.currentWindow then
+    _G.ccios.wm.currentWindow.customClose = true
+end
+
 local isColor = term.isColor and term.isColor() or false
 local function pickColor(colorValue, monoValue)
     if isColor then
@@ -668,6 +676,9 @@ while not closing do
         handleFileTransfer(p1)
     elseif event == "term_resize" then
         -- layout may have changed; nothing else to do, draw() handles it
+    elseif event == "ccios_close_request" then
+        -- only reachable when customClose was set, i.e. picker mode
+        cancelSave()
     end
 
     if not closing then

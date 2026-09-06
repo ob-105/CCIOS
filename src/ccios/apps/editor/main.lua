@@ -13,6 +13,16 @@ if not dialogOk then
     dialog = nil
 end
 
+-- Opt into handling our own close button (see wm.lua / docs/
+-- ARCHITECTURE.md): without this, the title-bar [x] would close the
+-- window unconditionally, same as any other app, silently discarding
+-- unsaved changes. With it, clicking [x] delivers a
+-- "ccios_close_request" event we handle just like the in-app Close
+-- button, via confirmClose() below.
+if _G.ccios and _G.ccios.wm and _G.ccios.wm.currentWindow then
+    _G.ccios.wm.currentWindow.customClose = true
+end
+
 local isColor = term.isColor and term.isColor() or false
 local function pickColor(colorValue, monoValue)
     if isColor then
@@ -374,6 +384,11 @@ while not closing do
             writeToPath(path)
         else
             status = "Save As cancelled"
+        end
+    elseif event == "ccios_close_request" then
+        closing = confirmClose()
+        if not closing then
+            status = "Close cancelled"
         end
     end
 

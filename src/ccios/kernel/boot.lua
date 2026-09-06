@@ -65,8 +65,11 @@ local manager = wm.new(term.current())
 
 -- A small read-only-by-convention surface so apps (e.g. the System
 -- Monitor) can query the running system without CCIOS needing a
--- separate formal "kernel API" yet. Apps should treat _G.ccios as
--- informational and not mutate it.
+-- separate formal "kernel API" yet. Apps should treat _G.ccios.wm as
+-- informational and not mutate it - with one deliberate exception: an
+-- app may set `_G.ccios.wm.currentWindow.customClose = true` during its
+-- own startup (see wm.lua) to opt into handling its own close button
+-- instead of the WM closing it unconditionally.
 _G.ccios = _G.ccios or {}
 _G.ccios.wm = manager
 _G.ccios.root = CCIOS_ROOT

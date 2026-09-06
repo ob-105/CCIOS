@@ -53,6 +53,14 @@ function wm.new(nativeTerm)
     -- to apps (e.g. the System Monitor) via self.stats.
     self.stats = { lastBurst = 0, maxBurst = 0 }
 
+    -- The window entry currently being resumed, if any - set right
+    -- before every resumeWindow call. Apps can read this (via
+    -- _G.ccios.wm.currentWindow, see boot.lua) during their own
+    -- synchronous startup, before their first yield, to identify "this
+    -- is my own window entry" and opt into custom close handling. See
+    -- entry.customClose below.
+    self.currentWindow = nil
+
     return self
 end
 
@@ -79,6 +87,14 @@ function wm:launch(path, title, x, y, w, h, ...)
         filter = nil,
         minimized = false,
         dead = false,
+        -- When false (default), clicking the title bar's [x] closes the
+        -- window immediately - no app code involved. An app can set
+        -- this true (via _G.ccios.wm.currentWindow.customClose = true,
+        -- during its own startup) to instead receive a
+        -- "ccios_close_request" event and decide for itself whether to
+        -- actually close (e.g. to confirm unsaved changes first). See
+        -- docs/ARCHITECTURE.md.
+        customClose = false,
         co = coroutine.create(function()
             fn(table.unpack(args))
         end),
@@ -137,6 +153,7 @@ function wm:resumeWindow(entry, event, a, b, c, d)
         return
     end
 
+    self.currentWindow = entry
     local prev = term.redirect(entry.win)
     local ok, result = coroutine.resume(entry.co, event, a, b, c, d)
     term.redirect(prev)
@@ -378,7 +395,16 @@ function wm:handleMouseClick(button, px, py)
 
     if py == entry.y then
         if px == entry.x + entry.w - 1 then
-            self:closeWindow(entry)
+            if entry.customClose then
+                -- let the app decide - it might confirm unsaved changes
+                -- first, or cancel a picker flow, etc. Bypasses filter
+                -- matching (like "terminate") since the app should always
+                -- get a chance to respond regardless of what event it
+                -- happens to be waiting on.
+                self:resumeWindow(entry, "ccios_close_request")
+            else
+                self:closeWindow(entry)
+            end
         else
             self.chromeDrag = { entry = entry, offsetX = px - entry.x, offsetY = py - entry.y }
         end

@@ -1,5 +1,51 @@
 # Dev log
 
+## Step 9 — Configurable close button (2026-09-06)
+
+Confirmed working in-game: steps 1-8.
+
+Requested directly to close a real gap noted at the end of step 8: the
+Save As picker's title-bar `[x]` would leave a waiting Text Editor
+stuck forever, and separately, the Editor's own unsaved-changes confirm
+only fired via its in-app Close button, not the title-bar one.
+
+Built:
+
+- `wm.lua`: windows default to closing instantly on `[x]` (unchanged
+  behavior for every existing app that doesn't touch this). A window can
+  opt out via `entry.customClose = true`, in which case `[x]` delivers a
+  `ccios_close_request` event to that window instead of closing it
+  directly - bypassing filter matching the same way `terminate` does, so
+  the app always gets a chance to respond. New `wm.currentWindow` field,
+  set to the entry right before every resume, is how an app identifies
+  "myself" to set this during its own startup (see docs/ARCHITECTURE.md
+  for why a direct field write here, unlike everything else on
+  `_G.ccios.wm`, is the one sanctioned exception to "read-only").
+- Text Editor now opts in unconditionally and handles
+  `ccios_close_request` with the same `confirmClose()` its Close button
+  already used - so both closing paths now behave identically.
+- Save As picker (File Explorer in `pickerMode == "save"`) opts in only
+  while picking, and its handler is just `cancelSave()` - the same thing
+  its own Cancel button does - so `[x]` now correctly reports
+  "cancelled" back to the Editor instead of leaving it hanging.
+
+### Things to specifically check when testing
+
+- [ ] Text Editor: clicking the title-bar `[x]` with no unsaved changes
+      closes immediately, same as before
+- [ ] Text Editor: clicking `[x]` WITH unsaved changes now shows the
+      same "Unsaved changes. Close without saving?" dialog the in-app
+      Close button already showed, and "No" leaves the window open
+- [ ] Save As picker: clicking `[x]` closes the picker AND the waiting
+      Editor shows "Save As cancelled" (not stuck/unresponsive)
+- [ ] Every other app (About, System Monitor, plain File Explorer
+      browsing, any `.lua` file launched directly) still closes
+      instantly on `[x]` - this should be a no-op for anything that
+      doesn't opt in
+- [ ] A crash while handling `ccios_close_request` (contrived, but worth
+      a sanity check if convenient) still results in the window closing
+      rather than becoming permanently unclosable
+
 ## Step 8 — New File/Folder, Save As picker (2026-09-06)
 
 Confirmed working in-game: steps 1-7.

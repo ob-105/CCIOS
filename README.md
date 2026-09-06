@@ -7,8 +7,8 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Steps 1-7 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor) — tested in-game, working.**
-**Step 8 (New File/Folder + Save As picker) — done, pending in-game testing.**
+**Steps 1-8 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor, New File/Save As picker) — tested in-game, working.**
+**Step 9 (configurable close button) — done, pending in-game testing.**
 
 - Floating, draggable, closable, resizable windows with title bars
 - Multiple windows at once; focusing a window (by clicking it, or
@@ -36,6 +36,11 @@ Built one part at a time, bug-tested manually in-game after each step.
   Start menu (blank document). Saving a document with no path yet opens
   the File Explorer as a "Save As" picker — browse to any folder, click
   Save, type a name — the same way Windows does it.
+- A window's title-bar close button closes it immediately by default,
+  but an app can opt in to handling it itself instead — the Text Editor
+  always does, to confirm unsaved changes first; the Save As picker does
+  while it's open, so closing it that way correctly cancels instead of
+  leaving the Text Editor waiting forever
 - Auto-updater: checks GitHub for a newer `manifest.json` on boot (asks
   before installing), plus a manual `update` shell command
 

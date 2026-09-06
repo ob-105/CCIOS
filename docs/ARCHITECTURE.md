@@ -119,17 +119,55 @@ _G.ccios = {
 }
 ```
 
-Treat `wm` as read-only/informational from app code — nothing enforces
-that, but poking `_G.ccios.wm`'s internals from an app would be reaching
-past the intended surface. `launch`, on the other hand, is meant to be
-called: it's `boot.lua`'s own cascaded/screen-clamped placement logic
-(the same thing the Start menu uses), exposed so any app can open
-another program the same way instead of reimplementing window placement
-itself. The File Explorer uses it to open `.lua` files.
+Treat `wm` as read-only/informational from app code, with one deliberate
+exception (below) — poking anything else in `_G.ccios.wm`'s internals
+from an app would be reaching past the intended surface. `launch`, on
+the other hand, is meant to be called: it's `boot.lua`'s own
+cascaded/screen-clamped placement logic (the same thing the Start menu
+uses), exposed so any app can open another program the same way instead
+of reimplementing window placement itself. The File Explorer uses it to
+open `.lua` files.
 
 This will likely grow into something more structured once an app needs
-more than this (e.g. closing another window, or the app store wanting
-the Start menu to refresh after installing something).
+more than this (e.g. the app store wanting the Start menu to refresh
+after installing something).
+
+### Opting into custom close handling
+
+By default, clicking a window's title-bar `[x]` closes it immediately —
+no app code runs at all, which is exactly what most apps want and why
+it's the default. An app that needs a chance to object (the Text
+Editor, to confirm unsaved changes; the Save As picker, to report back
+"cancelled" instead of just vanishing) can opt out of that default
+during its own startup, before its first `os.pullEvent()`:
+
+```lua
+if _G.ccios and _G.ccios.wm and _G.ccios.wm.currentWindow then
+    _G.ccios.wm.currentWindow.customClose = true
+end
+```
+
+`wm.currentWindow` is the one exception to "`_G.ccios.wm` is read-only"
+— it's set to an app's own window entry right before every resume of
+that app's coroutine (see `wm:resumeWindow`), so at the very top of a
+script, before any yield, it reliably points at "myself". Once
+`customClose` is set, clicking `[x]` delivers a `ccios_close_request`
+event to that window instead of closing it — bypassing filter matching
+entirely, the same way `terminate` does, so the app is guaranteed to see
+it regardless of what it was actually waiting for. The app then decides:
+call `dialog.confirm` if it wants to, and either end its own coroutine
+(closing itself, same "return and the WM reaps you" mechanism as
+always) or just do nothing and stay open. If the app's handling of that
+event errors, `resumeWindow`'s usual crash handling marks it dead anyway
+— a broken close handler can't make a window unclosable.
+
+The Text Editor always opts in (`confirmClose()` decides per-close
+whether that actually means showing a dialog). The Save As picker only
+opts in while `pickerMode == "save"`, and its handler is just a call to
+the same `cancelSave()` its own Cancel button uses — so closing via
+`[x]` now correctly reports "cancelled" back to the waiting Editor
+instead of leaving it stuck (see "Save As picker mode" below, and the
+deferred item about this from step 8 - now resolved).
 
 ## Watchdog headroom (the System Monitor's "instruction limit" gauge)
 
@@ -246,13 +284,12 @@ the time the WM resumes it. This is the same "just send an event"
 pattern every other app already uses; it just happens to be one app
 sending it to another instead of the WM sending it to an app.
 
-If the picker window is closed via the title-bar `x` instead of
-`Cancel`, no result event is ever queued (there's no way for the WM's
-own close handling to run app code — see the deferred "OK to close?"
-item above) and the waiting Editor just... keeps waiting, silently,
-until the user tries Save again. Not a crash, just a dead end — the
-`Cancel` button and Escape key both exist specifically so there's an
-explicit way out that does report back.
+The picker also sets `customClose = true` (see "Opting into custom close
+handling" above) so that closing it via the title-bar `[x]` runs the
+exact same `cancelSave()` its `Cancel` button does, rather than just
+vanishing and leaving the Editor waiting forever — that was a real gap
+in the first version of this feature, closed once `customClose` existed
+to close it with.
 
 ## Confirmation dialogs (`dialog.lua`)
 
@@ -289,16 +326,15 @@ are plenty fast. A few things worth knowing:
   untitled buffer — `Save` opens the Save As picker described above), or
   from Explorer's `Edit` action with a file path as the first launch
   argument (`local path = ...`).
-- **Closing itself**: the in-app `Close` button confirms first if there
-  are unsaved changes (via `dialog.confirm`), then just lets its own
-  `while not closing do ... end` loop end and the file's top-level chunk
-  return — same "returning ends the coroutine, WM notices it's dead and
-  reaps the window" mechanism noted in Window lifecycle above, no
-  special "close myself" API needed. Note this is *different* from
-  clicking the window's title-bar `x`, which the WM handles directly and
-  unconditionally — closing that way skips the unsaved-changes check
-  entirely, since the WM has no way to ask an app "is it OK to close
-  you?" yet (see the deferred list below).
+- **Closing itself**: both the in-app `Close` button and the title-bar
+  `[x]` (via `customClose` + `ccios_close_request`, see "Opting into
+  custom close handling" above) call the same `confirmClose()`, which
+  shows a `dialog.confirm` only if there are unsaved changes. Either
+  path, once allowed to proceed, just lets the `while not closing do
+  ... end` loop end and the file's top-level chunk return — same
+  "returning ends the coroutine, WM notices it's dead and reaps the
+  window" mechanism noted in Window lifecycle above, no special "close
+  myself" API needed.
 
 ## What's intentionally deferred
 
@@ -310,10 +346,6 @@ are plenty fast. A few things worth knowing:
 - Preventing duplicate launches (every click on a Start menu entry opens
   a new instance, same as clicking a taskbar icon in Windows without
   "single instance" apps)
-- Letting the WM ask an app "OK to close?" before the title-bar `x`
-  closes it — right now that always closes unconditionally, bypassing
-  e.g. the Text Editor's unsaved-changes confirm (its own in-app Close
-  button is the only closing path that checks)
 - File Explorer: rename, multi-select, creating a new folder from within
   Save As picker mode (Menu is hidden there entirely right now)
 - Text Editor: syntax highlighting, find/replace, undo
