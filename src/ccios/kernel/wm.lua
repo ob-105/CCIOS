@@ -36,6 +36,8 @@ function wm.new(nativeTerm)
     self.activeMouseWindow = nil -- window currently owning a mouse_click..mouse_up drag
     self.chromeDrag = nil        -- {entry=, offsetX=, offsetY=} when dragging a titlebar
     self.resizeDrag = nil        -- {entry=, startW=, startH=, startX=, startY=} when dragging the resize handle
+    self.vScrollDrag = nil       -- {entry=, startY=, startScroll=} when dragging a vertical scrollbar thumb
+    self.hScrollDrag = nil       -- {entry=, startX=, startScroll=} when dragging a horizontal scrollbar thumb
 
     -- Start menu: set self.startMenuApps = {{id=,name=},...} and
     -- self.onLaunchApp = function(manager, app) ... end externally
@@ -69,7 +71,12 @@ end
 -- ---------------------------------------------------------------------
 
 -- Launches `path` (a normal CraftOS program file) inside a new window.
-function wm:launch(path, title, x, y, w, h, ...)
+-- virtualW/virtualH (optional) request a drawing surface bigger than
+-- the visible w/h - see "System scrollbars" in docs/ARCHITECTURE.md.
+-- The app draws into that full-size surface as normal (term.getSize()
+-- reports the bigger size) and never has to know its output is only
+-- partially visible; the WM composites and scrolls the viewport itself.
+function wm:launch(path, title, x, y, w, h, virtualW, virtualH, ...)
     local ok, fn = pcall(loadfile, path)
     if not ok or fn == nil then
         error(("CCIOS: could not load app '%s': %s"):format(path, tostring(fn)))
@@ -77,13 +84,11 @@ function wm:launch(path, title, x, y, w, h, ...)
 
     local args = { ... }
     local contentH = math.max(1, h - 1)
-    local win = window.create(self.nativeTerm, x, y + 1, w, contentH, false)
 
     local entry = {
         id = self.nextId,
         title = title or "Untitled",
         x = x, y = y, w = w, h = h,
-        win = win,
         filter = nil,
         minimized = false,
         dead = false,
@@ -96,10 +101,37 @@ function wm:launch(path, title, x, y, w, h, ...)
         -- docs/ARCHITECTURE.md.
         customClose = false,
         maximized = false, -- see wm:toggleMaximize; restoreX/Y/W/H set when true
+        scrollable = false, -- see below
         co = coroutine.create(function()
             fn(table.unpack(args))
         end),
     }
+
+    virtualW = virtualW and math.max(virtualW, w) or w
+    virtualH = virtualH and math.max(virtualH, contentH) or contentH
+
+    if virtualW > w or virtualH > contentH then
+        -- the app draws into this oversized, permanently-invisible
+        -- buffer; window.getLine() lets the WM read back individual
+        -- rows of it to composite a scrolled viewport each frame (see
+        -- wm:compositeScrollable). Older CC:Tweaked versions without
+        -- getLine() fall back to an ordinary window sized to what's
+        -- visible - the app just doesn't get the extra room.
+        local bigWin = window.create(self.nativeTerm, x, y + 1, virtualW, virtualH, false)
+        if type(bigWin.getLine) == "function" then
+            entry.scrollable = true
+            entry.win = bigWin
+            entry.virtualW, entry.virtualH = virtualW, virtualH
+            entry.scrollX, entry.scrollY = 0, 0
+            entry.viewWin = window.create(self.nativeTerm, x, y + 1, w, contentH, false)
+            self:updateViewport(entry)
+        else
+            entry.win = window.create(self.nativeTerm, x, y + 1, w, contentH, false)
+        end
+    else
+        entry.win = window.create(self.nativeTerm, x, y + 1, w, contentH, false)
+    end
+
     self.nextId = self.nextId + 1
 
     table.insert(self.windows, entry)
@@ -125,6 +157,35 @@ function wm:closeWindow(entry)
     if self.resizeDrag and self.resizeDrag.entry == entry then
         self.resizeDrag = nil
     end
+    if self.vScrollDrag and self.vScrollDrag.entry == entry then
+        self.vScrollDrag = nil
+    end
+    if self.hScrollDrag and self.hScrollDrag.entry == entry then
+        self.hScrollDrag = nil
+    end
+end
+
+-- Recomputes a scrollable window's viewport size and scrollbar
+-- visibility from its current outer w/h against its fixed virtual
+-- size, clamps scroll position to still be valid, and repositions its
+-- on-screen buffer to match. Call whenever a scrollable window's outer
+-- size changes (drag-resize, maximize/restore).
+function wm:updateViewport(entry)
+    if not entry.scrollable then
+        return
+    end
+    local contentW, contentH = entry.w, math.max(1, entry.h - 1)
+    entry.needsVScroll = entry.virtualH > contentH
+    entry.needsHScroll = entry.virtualW > contentW
+    entry.viewportW = math.max(1, contentW - (entry.needsVScroll and 1 or 0))
+    entry.viewportH = math.max(1, contentH - (entry.needsHScroll and 1 or 0))
+
+    local maxScrollX = math.max(0, entry.virtualW - entry.viewportW)
+    local maxScrollY = math.max(0, entry.virtualH - entry.viewportH)
+    entry.scrollX = math.max(0, math.min(entry.scrollX, maxScrollX))
+    entry.scrollY = math.max(0, math.min(entry.scrollY, maxScrollY))
+
+    entry.viewWin.reposition(entry.x, entry.y + 1, entry.viewportW, entry.viewportH)
 end
 
 -- Moves a window to the top of the z-order and marks it focused.
@@ -222,6 +283,88 @@ function wm:drawWindowChrome(entry, isFocused)
     t.setBackgroundColor(pickColor(self.isColor, colors.orange, colors.white))
     t.setTextColor(pickColor(self.isColor, colors.white, colors.black))
     t.write("\\")
+end
+
+-- Copies the visible slice of a scrollable window's oversized buffer
+-- (entry.win) into its on-screen viewport buffer (entry.viewWin), row
+-- by row, via window.getLine() + term.blit(). This is what makes
+-- scrolling possible at all: CC's window objects have no built-in
+-- "show a scrolled sub-region of a bigger buffer" concept, so the WM
+-- does it by hand every frame.
+function wm:compositeScrollable(entry)
+    local vw, vh = entry.viewportW, entry.viewportH
+    local blank = string.rep(" ", entry.virtualW)
+    local blankColor = string.rep("f", entry.virtualW) -- CC blit code for black
+    for row = 1, vh do
+        local srcY = entry.scrollY + row
+        local text, fg, bg
+        if srcY <= entry.virtualH then
+            text, fg, bg = entry.win.getLine(srcY)
+        end
+        text, fg, bg = text or blank, fg or blankColor, bg or blankColor
+        local sx = entry.scrollX + 1
+        local ex = math.min(entry.virtualW, entry.scrollX + vw)
+        entry.viewWin.setCursorPos(1, row)
+        entry.viewWin.blit(text:sub(sx, ex), fg:sub(sx, ex), bg:sub(sx, ex))
+    end
+end
+
+-- Draws (and records hit-test bounds for) the vertical/horizontal
+-- scrollbars a scrollable window needs, based on entry.needsVScroll /
+-- entry.needsHScroll (see wm:updateViewport).
+function wm:drawScrollbars(entry)
+    if not entry.scrollable then
+        return
+    end
+    local t = self.nativeTerm
+    local trackBg = pickColor(self.isColor, colors.gray, colors.white)
+    local thumbBg = pickColor(self.isColor, colors.lightGray, colors.black)
+
+    if entry.needsVScroll then
+        local trackX = entry.x + entry.w - 1
+        local trackY1 = entry.y + 1
+        local trackH = entry.viewportH
+        local maxScroll = math.max(0, entry.virtualH - entry.viewportH)
+        local thumbH = math.max(1, math.floor(trackH * entry.viewportH / entry.virtualH))
+        local thumbPos = maxScroll > 0 and math.floor((trackH - thumbH) * entry.scrollY / maxScroll) or 0
+
+        for row = 0, trackH - 1 do
+            t.setCursorPos(trackX, trackY1 + row)
+            local onThumb = row >= thumbPos and row < thumbPos + thumbH
+            t.setBackgroundColor(onThumb and thumbBg or trackBg)
+            t.write(" ")
+        end
+
+        entry.vScrollX = trackX
+        entry.vScrollY1, entry.vScrollY2 = trackY1, trackY1 + trackH - 1
+        entry.vScrollThumbY1, entry.vScrollThumbY2 = trackY1 + thumbPos, trackY1 + thumbPos + thumbH - 1
+    else
+        entry.vScrollX = nil
+    end
+
+    if entry.needsHScroll then
+        local trackY = entry.y + 1 + entry.viewportH
+        local trackX1 = entry.x
+        local trackW = entry.viewportW
+        local maxScroll = math.max(0, entry.virtualW - entry.viewportW)
+        local thumbW = math.max(1, math.floor(trackW * entry.viewportW / entry.virtualW))
+        local thumbPos = maxScroll > 0 and math.floor((trackW - thumbW) * entry.scrollX / maxScroll) or 0
+
+        for col = 0, trackW - 1 do
+            t.setCursorPos(trackX1 + col, trackY)
+            local onThumb = col >= thumbPos and col < thumbPos + thumbW
+            t.setBackgroundColor(onThumb and thumbBg or trackBg)
+            t.write(" ")
+        end
+
+        entry.hScrollY = trackY
+        entry.hScrollX1, entry.hScrollX2 = trackX1, trackX1 + trackW - 1
+        entry.hScrollThumbX1, entry.hScrollThumbX2 = trackX1 + thumbPos, trackX1 + thumbPos + thumbW - 1
+    else
+        entry.hScrollY = nil
+    end
+
+    t.setBackgroundColor(colors.black)
 end
 
 function wm:drawTaskbar()
@@ -332,10 +475,19 @@ function wm:draw()
 
     for _, entry in ipairs(self.windows) do
         if not entry.minimized then
-            entry.win.setVisible(true)
-            entry.win.redraw()
-            -- chrome (title bar, close button, resize handle) is drawn
-            -- after the content so it isn't covered by it
+            if entry.scrollable then
+                self:compositeScrollable(entry)
+                entry.viewWin.setVisible(true)
+                entry.viewWin.redraw()
+            else
+                entry.win.setVisible(true)
+                entry.win.redraw()
+            end
+            -- scrollbars first, then chrome (title bar, close/maximize
+            -- buttons, resize handle) on top - the resize handle and a
+            -- vertical scrollbar's track can share their bottom-right
+            -- corner cell, and the resize handle should win there
+            self:drawScrollbars(entry)
             self:drawWindowChrome(entry, entry == self:focused())
         end
     end
@@ -360,7 +512,11 @@ function wm:toggleMaximize(entry)
         entry.h = self.taskbarY - 1
         entry.maximized = true
     end
-    entry.win.reposition(entry.x, entry.y + 1, entry.w, math.max(1, entry.h - 1))
+    if entry.scrollable then
+        self:updateViewport(entry)
+    else
+        entry.win.reposition(entry.x, entry.y + 1, entry.w, math.max(1, entry.h - 1))
+    end
     if matchesFilter(entry, "term_resize") then
         self:resumeWindow(entry, "term_resize")
     end
@@ -388,6 +544,39 @@ end
 -- ---------------------------------------------------------------------
 -- Event handling
 -- ---------------------------------------------------------------------
+
+-- Handles a click that landed within a scrollable window's scrollbar
+-- area: on the thumb, starts a drag; on empty track, jumps the thumb
+-- (and thus the scroll position) straight there. Returns true if the
+-- click was on a scrollbar at all, so the caller knows not to also
+-- treat it as a content click.
+function wm:handleScrollbarClick(entry, px, py)
+    if entry.vScrollX and px == entry.vScrollX and py >= entry.vScrollY1 and py <= entry.vScrollY2 then
+        if py >= entry.vScrollThumbY1 and py <= entry.vScrollThumbY2 then
+            self.vScrollDrag = { entry = entry, startY = py, startScroll = entry.scrollY }
+        else
+            local trackH = entry.vScrollY2 - entry.vScrollY1 + 1
+            local maxScroll = math.max(0, entry.virtualH - entry.viewportH)
+            local frac = (py - entry.vScrollY1) / math.max(1, trackH - 1)
+            entry.scrollY = math.max(0, math.min(maxScroll, math.floor(frac * maxScroll + 0.5)))
+        end
+        return true
+    end
+
+    if entry.hScrollY and py == entry.hScrollY and px >= entry.hScrollX1 and px <= entry.hScrollX2 then
+        if px >= entry.hScrollThumbX1 and px <= entry.hScrollThumbX2 then
+            self.hScrollDrag = { entry = entry, startX = px, startScroll = entry.scrollX }
+        else
+            local trackW = entry.hScrollX2 - entry.hScrollX1 + 1
+            local maxScroll = math.max(0, entry.virtualW - entry.viewportW)
+            local frac = (px - entry.hScrollX1) / math.max(1, trackW - 1)
+            entry.scrollX = math.max(0, math.min(maxScroll, math.floor(frac * maxScroll + 0.5)))
+        end
+        return true
+    end
+
+    return false
+end
 
 function wm:handleMouseClick(button, px, py)
     if py == self.taskbarY and px >= self.startButtonX1 and px <= self.startButtonX2 then
@@ -461,6 +650,10 @@ function wm:handleMouseClick(button, px, py)
         return
     end
 
+    if entry.scrollable and self:handleScrollbarClick(entry, px, py) then
+        return
+    end
+
     -- content click: translate to window-local space and deliver
     self.activeMouseWindow = entry
     local localX = px - entry.x + 1
@@ -480,6 +673,9 @@ function wm:handleMouseDrag(button, px, py)
         newY = math.max(1, math.min(newY, self.taskbarY - entry.h))
         entry.x, entry.y = newX, newY
         entry.win.reposition(entry.x, entry.y + 1)
+        if entry.scrollable then
+            entry.viewWin.reposition(entry.x, entry.y + 1)
+        end
         return
     end
 
@@ -492,11 +688,35 @@ function wm:handleMouseDrag(button, px, py)
         newH = math.max(MIN_WINDOW_H, math.min(newH, self.taskbarY - entry.y))
         if newW ~= entry.w or newH ~= entry.h then
             entry.w, entry.h = newW, newH
-            entry.win.reposition(entry.x, entry.y + 1, entry.w, math.max(1, entry.h - 1))
+            if entry.scrollable then
+                self:updateViewport(entry)
+            else
+                entry.win.reposition(entry.x, entry.y + 1, entry.w, math.max(1, entry.h - 1))
+            end
             if matchesFilter(entry, "term_resize") then
                 self:resumeWindow(entry, "term_resize")
             end
         end
+        return
+    end
+
+    if self.vScrollDrag then
+        local d = self.vScrollDrag
+        local entry = d.entry
+        local trackH = entry.vScrollY2 - entry.vScrollY1 + 1
+        local maxScroll = math.max(0, entry.virtualH - entry.viewportH)
+        local deltaScroll = maxScroll > 0 and math.floor((py - d.startY) * maxScroll / math.max(1, trackH - 1)) or 0
+        entry.scrollY = math.max(0, math.min(maxScroll, d.startScroll + deltaScroll))
+        return
+    end
+
+    if self.hScrollDrag then
+        local d = self.hScrollDrag
+        local entry = d.entry
+        local trackW = entry.hScrollX2 - entry.hScrollX1 + 1
+        local maxScroll = math.max(0, entry.virtualW - entry.viewportW)
+        local deltaScroll = maxScroll > 0 and math.floor((px - d.startX) * maxScroll / math.max(1, trackW - 1)) or 0
+        entry.scrollX = math.max(0, math.min(maxScroll, d.startScroll + deltaScroll))
         return
     end
 
@@ -517,6 +737,14 @@ function wm:handleMouseUp(button, px, py)
         self.resizeDrag = nil
         return
     end
+    if self.vScrollDrag then
+        self.vScrollDrag = nil
+        return
+    end
+    if self.hScrollDrag then
+        self.hScrollDrag = nil
+        return
+    end
     local entry = self.activeMouseWindow
     if entry and matchesFilter(entry, "mouse_up") then
         local localX = px - entry.x + 1
@@ -528,7 +756,17 @@ end
 
 function wm:handleMouseScroll(dir, px, py)
     local entry = self:windowAt(px, py)
-    if entry and matchesFilter(entry, "mouse_scroll") then
+    if not entry then
+        return
+    end
+
+    if entry.scrollable and entry.needsVScroll then
+        local maxScroll = math.max(0, entry.virtualH - entry.viewportH)
+        entry.scrollY = math.max(0, math.min(maxScroll, entry.scrollY + dir * 3))
+        return
+    end
+
+    if matchesFilter(entry, "mouse_scroll") then
         local localX = px - entry.x + 1
         local localY = py - entry.y
         self:resumeWindow(entry, "mouse_scroll", dir, localX, localY)
@@ -563,6 +801,9 @@ function wm:dispatch(event, a, b, c, d)
             entry.x = math.min(entry.x, math.max(1, self.screenW - entry.w + 1))
             entry.y = math.min(entry.y, math.max(1, self.taskbarY - entry.h))
             entry.win.reposition(entry.x, entry.y + 1)
+            if entry.scrollable then
+                entry.viewWin.reposition(entry.x, entry.y + 1)
+            end
         end
     elseif event == "terminate" then
         -- mirrors CraftOS: terminate always interrupts, regardless of

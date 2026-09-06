@@ -1,5 +1,70 @@
 # Dev log
 
+## Step 11 — System scrollbars (2026-09-06)
+
+Confirmed working in-game: steps 1-10.
+
+Requested to fix a concrete problem: the System Monitor's output gets
+cut off unless the window is maximized. Rather than just making its
+default window taller (which just moves the same problem to whatever
+screen it happens to run on next), built real WM-level scrolling that
+any app can opt into.
+
+Built:
+
+- `wm.lua`: a scrollable window entry gets two CC `window` buffers - a
+  big permanently-invisible one the app actually draws into
+  (`entry.win`, sized to the *requested* virtual size), and a small
+  visible one (`entry.viewWin`) the WM composites a scrolled slice of
+  the big one into every frame, via `window.getLine()` +
+  `viewWin.blit()`. Apps don't do anything differently; `term.getSize()`
+  just reports the bigger size and they draw normally. Falls back to an
+  ordinary correctly-sized window if `window.getLine` isn't available
+  on the running CC:Tweaked version - the one part of this resting on a
+  CC:Tweaked capability CCIOS didn't previously depend on, worth
+  confirming in-game.
+- Vertical and/or horizontal scrollbars (only the ones actually needed,
+  based on comparing the virtual size to the *current* window size - so
+  maximizing a window can make its scrollbar disappear on its own).
+  Mouse wheel, thumb dragging, and click-track-to-jump all work, using
+  the same drag-state pattern as window move/resize
+  (`self.vScrollDrag`/`self.hScrollDrag`).
+- Declared per-app via the manifest (`window.virtualHeight` /
+  `virtualWidth`), not a runtime call - an app can only ask for
+  anything *after* its first resume, but by then the window already has
+  to exist and be ready to draw into, so it has to be known upfront.
+  This means it's opt-in per app, not automatically applied everywhere;
+  System Monitor's manifest is the only app changed to actually use it.
+- System Monitor now requests `virtualHeight: 20` against its default
+  `height: 16` - its content needs up to ~18 lines, which didn't fit in
+  15 visible rows (16 minus the title bar).
+
+See docs/ARCHITECTURE.md's new "System scrollbars" section for the full
+design reasoning, especially why this needed two windows per app rather
+than one.
+
+### Things to specifically check when testing
+
+- [ ] System Monitor, at its default (non-maximized) size, shows a
+      vertical scrollbar and all of its content is reachable by
+      scrolling - nothing is permanently cut off anymore
+- [ ] Mouse wheel over a scrollable window's content scrolls it
+- [ ] Dragging the scrollbar thumb scrolls smoothly and stays within
+      bounds (can't drag past the top/bottom of content)
+- [ ] Clicking empty scrollbar track (not on the thumb) jumps the view
+      there directly
+- [ ] Maximizing a scrollable window whose full virtual content now fits
+      makes the scrollbar disappear; restoring it back down brings the
+      scrollbar back
+- [ ] Dragging/resizing a scrollable window by its title bar or resize
+      handle keeps the on-screen content in the right place (no visual
+      lag or misalignment between the window frame and its content)
+- [ ] Every other (non-scrollable) app is completely unaffected -
+      About, Explorer, Editor should look and behave exactly as before
+- [ ] If this CC:Tweaked version turns out not to have `window.getLine`,
+      System Monitor should still open and run fine, just without the
+      extra scrollable room (not crash or fail to launch)
+
 ## Step 10 — Right-click menus, taskbar clock, maximize (2026-09-06)
 
 Confirmed working in-game: steps 1-9.

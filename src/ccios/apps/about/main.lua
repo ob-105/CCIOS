@@ -31,7 +31,7 @@ local function draw()
     end
 
     local lines = {
-        "Version    : 0.10.0",
+        "Version    : 0.11.0",
         "Device     : " .. deviceKind .. (isColor and " (advanced)" or " (standard)"),
         "Computer ID: " .. tostring(id),
         "Label      : " .. label,

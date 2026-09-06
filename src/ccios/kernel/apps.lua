@@ -29,6 +29,11 @@ function appsModule.discover(root)
                     entry = dir .. "/" .. manifest.entry,
                     width = window.width or 30,
                     height = window.height or 12,
+                    -- optional: requests a drawing surface taller/wider
+                    -- than the visible window, scrollable via the WM's
+                    -- own scrollbars - see docs/ARCHITECTURE.md
+                    virtualWidth = window.virtualWidth,
+                    virtualHeight = window.virtualHeight,
                 })
             end
         end

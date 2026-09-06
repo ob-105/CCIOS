@@ -7,8 +7,8 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Steps 1-9 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor, New File/Save As picker, configurable close button) — tested in-game, working.**
-**Step 10 (right-click menus, taskbar clock, maximize) — done, pending in-game testing.**
+**Steps 1-10 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor, New File/Save As picker, configurable close button, right-click menus/clock/maximize) — tested in-game, working.**
+**Step 11 (system scrollbars) — done, pending in-game testing.**
 
 - Floating, draggable, closable, resizable, maximizable windows with
   title bars
@@ -22,6 +22,12 @@ Built one part at a time, bug-tested manually in-game after each step.
 - Drag a window's bottom-right corner (`\`) to resize it, or click the
   `o` button on its title bar to maximize/restore; apps get a
   `term_resize` event either way and can redraw at the new size
+- A window can request a taller/wider drawing surface than its visible
+  size (declared in its manifest); the WM composites and scrolls it
+  automatically, with vertical and/or horizontal scrollbars, mouse-wheel
+  support, and draggable thumbs — the app itself doesn't need to know
+  its content is being scrolled. System Monitor uses this so its full
+  output is reachable without having to maximize the window.
 - Works on color (Advanced) and mono (standard) screens
 - Apps are ordinary CraftOS programs (`term.*` / `os.pullEvent`) — no
   special API required to write one

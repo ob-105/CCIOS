@@ -94,7 +94,7 @@ local function launchApp(m, app)
     local x = math.min(baseX + step * 2, math.max(1, screenW - w + 1))
     local y = math.min(baseY + step, math.max(1, screenH - 1 - h + 1))
     spawnCounts[app.id] = count + 1
-    m:launch(app.entry, app.name, x, y, w, h, table.unpack(app.args or {}))
+    m:launch(app.entry, app.name, x, y, w, h, app.virtualWidth, app.virtualHeight, table.unpack(app.args or {}))
 end
 
 manager.onLaunchApp = launchApp

@@ -7,6 +7,7 @@
     "description": "Disk usage, watchdog headroom, memory, and other system stats.",
     "window": {
         "width": 42,
-        "height": 16
+        "height": 16,
+        "virtualHeight": 20
     }
 }

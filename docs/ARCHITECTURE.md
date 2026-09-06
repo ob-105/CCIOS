@@ -105,6 +105,91 @@ doesn't rely on CraftOS's own `term_resize` event at all — the WM
 already drives each app's coroutine directly, so it just delivers the
 event itself the moment it changes the window's buffer size.
 
+## System scrollbars
+
+Some apps have more to show than fits in a comfortably-sized window
+(the System Monitor being the concrete case that prompted this). The
+fix isn't "make apps implement their own scrolling" — that's what File
+Explorer and the Text Editor already do, because they specifically need
+to scroll one thing (a list, a text buffer) while keeping other UI
+(header, buttons) fixed. This is a different, simpler case: a whole
+screenful of static-ish output that just doesn't fit, from an app that
+never had to think about scrolling at all. For that, the WM can give a
+window a drawing surface bigger than what's visible and handle showing
+a scrolled slice of it automatically — the app keeps using
+`term.getSize()`/`term.write()` exactly as if it had a bigger window,
+and never finds out it's being scrolled.
+
+**Why this needs two windows per app, not one.** CC:Tweaked's `window`
+object has no concept of "this buffer is bigger than what's on screen,
+show me a scrolled portion of it" — a window's `redraw()` always blits
+its *entire* declared area. So a window bigger than the visible space
+can never safely become `visible`; it would overflow across the rest of
+the desktop the moment it's drawn. Instead, a scrollable window entry
+gets:
+
+- `entry.win` — the big, requested-size buffer, permanently invisible.
+  This is what apps draw into (`term.redirect(entry.win)` before every
+  resume, exactly as with any other window) and what `term.getSize()`
+  reports the size of.
+- `entry.viewWin` — a small buffer sized to what's actually visible.
+  This is the one that ever gets `setVisible(true)`/`redraw()`'d to the
+  real screen.
+
+Every frame, `wm:compositeScrollable(entry)` copies the currently-
+scrolled-to slice of `entry.win` into `entry.viewWin`, one row at a
+time, using `window.getLine(y)` (returns a row's text plus its
+per-character foreground/background color codes — the same shape
+`term.blit` takes) and `viewWin.blit(...)`. This is the one part of the
+feature that depends on a CC:Tweaked capability CCIOS doesn't otherwise
+use: if `getLine` isn't present (older CC:Tweaked versions), `wm:launch`
+detects that at creation time and just falls back to an ordinary
+single, correctly-sized window — the app quietly doesn't get the extra
+room, rather than anything crashing. Worth confirming in-game since
+this is the one piece of the feature resting on an assumption about the
+CC:Tweaked API surface rather than something already exercised
+elsewhere in CCIOS.
+
+**How an app asks for this.** There's no runtime call for it (unlike
+`customClose`) because of a timing problem: an app can only make
+requests *after* being resumed for the first time, but by then `wm:launch`
+has already had to decide what kind of window to create and let the app
+start drawing into it. So instead it's declared up front, in the
+manifest, alongside `width`/`height`:
+
+```json
+"window": { "width": 42, "height": 16, "virtualHeight": 20 }
+```
+
+(`virtualWidth` works the same way, for horizontal scrolling.)
+`apps.lua` reads these into the app descriptor, `boot.lua`'s `launchApp`
+passes them to `wm:launch` as two extra positional parameters ahead of
+the app's own launch args, and `wm:launch` only builds the two-window
+setup when a virtual size bigger than the visible size was actually
+requested — every app that doesn't ask for this (which is most of them)
+gets the exact same single-window path as before, at no extra cost.
+This is why it isn't automatic for every app: nothing else needed
+changing to add it (System Monitor's manifest is the only app file
+touched), but it does mean a new app with more content than fits has to
+add one line to its manifest to get scrolling, rather than it happening
+for free.
+
+**Scrollbars and input.** `wm:updateViewport(entry)` derives
+`needsVScroll`/`needsHScroll` by comparing the fixed virtual size
+against the *current* outer window size — so maximizing a window whose
+virtual size now fits inside the visible area makes its scrollbar(s)
+disappear on their own, and shrinking it back down brings them back.
+Whichever scrollbars are needed eat into the visible viewport (a column
+for vertical, a row for horizontal) the same way a real OS's do. A
+vertical scrollbar's track can end up sharing its bottom cell with the
+resize handle when there's no horizontal scrollbar; the resize handle
+wins there both visually (chrome is drawn after scrollbars) and for
+hit-testing (checked first in `handleMouseClick`). Interaction is the usual
+three ways: mouse wheel (intercepted by the WM for scrollable windows,
+not forwarded to the app), dragging the thumb, or clicking empty track
+to jump straight there — tracked in `self.vScrollDrag`/`self.hScrollDrag`,
+the same pattern as `chromeDrag`/`resizeDrag`.
+
 ## Maximize/restore
 
 A second title-bar button (`o`, just left of the close `x`) calls
@@ -395,3 +480,10 @@ are plenty fast. A few things worth knowing:
 - File Explorer: rename, multi-select, creating a new folder from within
   Save As picker mode (Menu is hidden there entirely right now)
 - Text Editor: syntax highlighting, find/replace, undo
+- System scrollbars: changing `virtualWidth`/`virtualHeight` at runtime
+  (it's launch-time-only, read from the manifest); resizable content
+  within the scrollable viewport reflecting a *different* virtual size
+  on resize (right now the virtual size is fixed for the window's whole
+  lifetime — only the *viewport* into it changes as the window is
+  resized/maximized); scrollbar keyboard shortcuts (Page Up/Down, arrow
+  keys) — currently mouse-only (wheel, thumb drag, track click)
