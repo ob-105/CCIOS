@@ -59,10 +59,33 @@ unmodified on both device tiers.
   it as a coroutine inside a new window.
 - Closing (clicking the title bar's `x`) removes the window immediately.
 - A crashed app (an error propagating out of `os.pullEvent`, other than
-  `"Terminated"`) is caught, the window is closed, and the error is
-  stashed on `entry.crashMessage` (not yet surfaced in the UI — the app
-  launcher error dialog is a step-2 concern).
-- The WM's `run()` loop exits once no windows remain.
+  `"Terminated"`) is caught, the window is closed, the error is stashed
+  on `entry.crashMessage`, and a toast is queued via `wm:notify` (see
+  below) so it's no longer just a window silently vanishing.
+- The WM's `run()` loop exits once no windows remain and no
+  notification is still queued (see below - otherwise a crash in the
+  last open window would exit CCIOS before its toast was ever shown).
+
+## Crash notifications
+
+`wm:notify(title, message)` pushes onto `self.notifications`, a queue
+drawn one at a time as a small red toast in the top-right corner
+(`wm:drawNotification`) — on top of everything, including the Start
+menu, since it's drawn last in `wm:draw()`. It's dismissed by clicking
+it (checked first, before anything else, in `handleMouseClick`) or
+automatically after 10 seconds (checked on the same per-second timer
+tick that drives the taskbar clock — see "Taskbar clock" below). The
+only thing that currently queues one is `wm:resumeWindow` when an app
+crashes; nothing app-facing calls `wm:notify` yet, though there's no
+reason another WM-level event couldn't use it later.
+
+This is deliberately WM-level chrome, not a per-window dialog: unlike
+`dialog.lua` (which an *app* draws into its own window, correctly,
+because it's running on that app's own coroutine with `term` redirected
+to it), a notification has no owning window to draw into by the time
+the app that crashed is gone - it has to be something the WM itself
+draws directly via `self.nativeTerm`, the same way all of its own
+chrome (title bars, taskbar, Start menu) already does.
 
 ## App discovery and the Start menu
 
@@ -467,9 +490,37 @@ are plenty fast. A few things worth knowing:
   window" mechanism noted in Window lifecycle above, no special "close
   myself" API needed.
 
+## Settings
+
+`src/ccios/apps/settings/main.lua` is intentionally thin: it's a UI on
+top of the standard CC `settings` API for the one setting CCIOS
+currently defines (`ccios.autoUpdateCheck`, also defined identically in
+`boot.lua` - `settings.define` is idempotent, so both call sites
+defining it is harmless and means Settings works even if `boot.lua`
+somehow hasn't run first) plus a "check now" button that calls
+`updater.checkForUpdate()`/`updater.applyManifest()` directly - the same
+functions `boot.lua`'s boot-time check and `/update.lua`'s shell command
+already use, so there's exactly one place that logic lives. There's
+only one real toggle right now; the app exists as the place future
+settings land, not because one checkbox needed its own app.
+
+## Task Manager
+
+`src/ccios/apps/taskmgr/main.lua` lists `_G.ccios.wm.windows` (topmost
+first) and force-closes one via `wmInfo:closeWindow(entry)` directly -
+apps already have raw access to the manager object through `_G.ccios.wm`,
+so no new surface was needed for this. This deliberately **bypasses**
+`customClose`: End Task is the blunt instrument for a window that won't
+close normally (the Text Editor ignoring its own confirm, say), so
+asking it nicely again via `ccios_close_request` would defeat the point.
+This mirrors Windows' own Task Manager, which also skips graceful
+shutdown on End Task. Nothing stops Task Manager from ending its own
+window this way; that's harmless (see `wm:closeWindow` - it just leaves
+that coroutine parked at its next `os.pullEvent()` forever, eventually
+garbage collected, same as any other closed window's coroutine).
+
 ## What's intentionally deferred
 
-- Surfacing app crash messages in the UI
 - Forwarding the *real* `term_resize` (the physical screen resizing) to
   individual apps — only resize-handle-triggered resizes are forwarded
   right now
@@ -487,3 +538,11 @@ are plenty fast. A few things worth knowing:
   lifetime — only the *viewport* into it changes as the window is
   resized/maximized); scrollbar keyboard shortcuts (Page Up/Down, arrow
   keys) — currently mouse-only (wheel, thumb drag, track click)
+- Notifications: only one queued type exists (crashes); no way for an
+  app to push its own; no notification history/center to revisit a
+  dismissed or auto-expired one
+- Settings: only one real setting exists; no search, categories, or
+  per-app settings pages
+- Task Manager: no per-window resource stats (only the WM-wide
+  watchdog headroom in System Monitor exists, not a per-window
+  breakdown), no multi-select/end-multiple-at-once

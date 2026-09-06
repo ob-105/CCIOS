@@ -1,0 +1,12 @@
+{
+    "id": "settings",
+    "name": "Settings",
+    "version": "0.1.0",
+    "author": "CCIOS",
+    "entry": "main.lua",
+    "description": "Configure CCIOS - update checks, and more over time.",
+    "window": {
+        "width": 42,
+        "height": 12
+    }
+}

@@ -7,8 +7,8 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Steps 1-10 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor, New File/Save As picker, configurable close button, right-click menus/clock/maximize) — tested in-game, working.**
-**Step 11 (system scrollbars) — done, pending in-game testing.**
+**Steps 1-11 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor, New File/Save As picker, configurable close button, right-click menus/clock/maximize, system scrollbars) — tested in-game, working.**
+**Step 12 (crash notifications, Settings, Task Manager) — done, pending in-game testing.**
 
 - Floating, draggable, closable, resizable, maximizable windows with
   title bars
@@ -32,8 +32,15 @@ Built one part at a time, bug-tested manually in-game after each step.
 - Apps are ordinary CraftOS programs (`term.*` / `os.pullEvent`) — no
   special API required to write one
 - "About CCIOS", "System Monitor" (disk usage, watchdog headroom,
-  memory, open windows, peripherals), "File Explorer", and "Text Editor"
-  apps, all in the Start menu
+  memory, open windows, peripherals), "File Explorer", "Text Editor",
+  "Settings", and "Task Manager" apps, all in the Start menu
+- A crashed app now shows a dismissable toast with its error message
+  instead of just silently vanishing
+- Settings: toggle the auto-update-on-boot check, or check for updates
+  right now
+- Task Manager: lists every open window and force-closes ("End Task")
+  one directly, bypassing whatever close confirmation it might
+  otherwise show — for when an app won't close normally
 - File Explorer: browse folders, double-click (or Enter) a `.lua` file
   to run it, drag-and-drop a file onto the Minecraft window to copy it
   into whatever folder is currently open, and contextual actions —
@@ -73,12 +80,15 @@ This installs `/startup.lua` and `/ccios/...`, then reboots into CCIOS.
 ## Updating
 
 CCIOS checks GitHub for a newer version each boot and asks before
-installing (toggle with `settings.set("ccios.autoUpdateCheck", false)`
-then `settings.save()`). To check on demand, run:
+installing (toggle it from the Settings app, or with
+`settings.set("ccios.autoUpdateCheck", false)` then `settings.save()`).
+To check on demand, run:
 
 ```text
 update
 ```
+
+or use Settings' "Check for Updates Now" button.
 
 Both paths compare against `manifest.json` on the `main` branch, so a
 push to `main` is what makes an update available to installs in the wild.
@@ -110,6 +120,12 @@ src/
         manifest.json       -- app metadata
       editor/
         main.lua            -- Text Editor app
+        manifest.json       -- app metadata
+      settings/
+        main.lua            -- Settings app
+        manifest.json       -- app metadata
+      taskmgr/
+        main.lua            -- Task Manager app
         manifest.json       -- app metadata
 docs/
   ARCHITECTURE.md

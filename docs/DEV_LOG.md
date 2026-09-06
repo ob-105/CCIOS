@@ -1,5 +1,64 @@
 # Dev log
 
+## Step 12 — Crash notifications, Settings, Task Manager (2026-09-06)
+
+Confirmed working in-game: steps 1-11.
+
+Three separate asks bundled together:
+
+- **Crash notifications**: `wm:notify(title, message)` queues a
+  dismissable red toast (top-right corner, on top of everything,
+  auto-expires after 10s or click-to-dismiss), and `wm:resumeWindow`
+  now calls it whenever an app crashes (previously the window just
+  vanished with no explanation - `entry.crashMessage` was captured but
+  never shown anywhere). Also fixed a related edge case while building
+  this: `wm:run()`'s exit condition now also checks that no notification
+  is queued, so a crash in the *last* open window doesn't exit CCIOS
+  before its toast is ever shown.
+- **Settings app** (`src/ccios/apps/settings`): a UI for
+  `ccios.autoUpdateCheck` (the one setting that exists) plus a
+  "Check for Updates Now" button that calls straight into
+  `updater.lua` - the same functions `boot.lua`'s boot check and
+  `/update.lua` already use, so the actual update logic still lives in
+  exactly one place.
+- **Task Manager** (`src/ccios/apps/taskmgr`): lists open windows via
+  `_G.ccios.wm.windows` and force-closes ("End Task") one via
+  `wmInfo:closeWindow(entry)` directly - deliberately bypassing
+  `customClose`/`ccios_close_request`, since End Task's whole point is
+  being the blunt instrument for a window that won't close normally.
+  Matches how Windows' own Task Manager behaves.
+
+See docs/ARCHITECTURE.md for the fuller reasoning on each, especially
+why crash notifications had to be WM-level chrome (drawn directly by
+the WM) rather than something drawn by a window, since by definition
+there's no app left to draw it once it's crashed.
+
+### Things to specifically check when testing
+
+- [ ] Crashing an app (e.g. temporarily break a `.lua` file's syntax
+      and run it) shows a red toast with a sensible error message,
+      instead of the window just disappearing silently
+- [ ] The toast dismisses on click, and also auto-dismisses after ~10s
+      if left alone
+- [ ] Crashing the *only* open window still shows the toast before
+      CCIOS exits (doesn't just silently drop to the shell)
+- [ ] Settings' checkbox reflects the real current value on open, and
+      toggling it actually persists (check via a reboot, or `settings.get`
+      in the shell)
+- [ ] Settings' "Check for Updates Now" correctly reports up-to-date
+      when there's nothing new, and offers to install when there is
+      (bump `manifest.json`'s version to test the "update available"
+      path deliberately)
+- [ ] Task Manager lists every currently open window with sensible
+      titles, marks the focused one, and shows "(minimized)" for
+      minimized ones
+- [ ] Clicking [End] actually closes that window (removed from the
+      taskbar, gone from the desktop) - including for a window that has
+      `customClose` set (e.g. the Text Editor with unsaved changes) -
+      it should close WITHOUT the usual confirm prompt
+- [ ] Task Manager can end its own window without CCIOS getting stuck
+      or erroring
+
 ## Step 11 — System scrollbars (2026-09-06)
 
 Confirmed working in-game: steps 1-10.

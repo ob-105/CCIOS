@@ -1,0 +1,12 @@
+{
+    "id": "taskmgr",
+    "name": "Task Manager",
+    "version": "0.1.0",
+    "author": "CCIOS",
+    "entry": "main.lua",
+    "description": "List open windows and force-close ones that are stuck.",
+    "window": {
+        "width": 40,
+        "height": 12
+    }
+}

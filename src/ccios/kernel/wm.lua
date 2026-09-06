@@ -63,6 +63,12 @@ function wm.new(nativeTerm)
     -- entry.customClose below.
     self.currentWindow = nil
 
+    -- Queue of {title=, message=, time=} shown one at a time as a
+    -- dismissable toast in the top-right corner - currently only used
+    -- to surface a crashed app's error (see wm:resumeWindow), which
+    -- previously just vanished with no explanation. See wm:notify.
+    self.notifications = {}
+
     return self
 end
 
@@ -224,6 +230,7 @@ function wm:resumeWindow(entry, event, a, b, c, d)
         entry.dead = true
         if result ~= "Terminated" then
             entry.crashMessage = result
+            self:notify(entry.title .. " crashed", result)
         end
     elseif coroutine.status(entry.co) == "dead" then
         entry.dead = true
@@ -235,6 +242,12 @@ end
 
 local function matchesFilter(entry, eventName)
     return entry.filter == nil or entry.filter == eventName
+end
+
+-- Queues a dismissable toast (see wm:drawNotification / wm:run's
+-- auto-dismiss). Shown one at a time; more queue up behind it.
+function wm:notify(title, message)
+    table.insert(self.notifications, { title = title, message = tostring(message), time = os.clock() })
 end
 
 -- ---------------------------------------------------------------------
@@ -467,6 +480,56 @@ function wm:drawStartMenu()
     end
 end
 
+-- Draws the front-most queued notification (see wm:notify) as a toast
+-- in the top-right corner, on top of everything else including the
+-- Start menu. Records its bounds for click-to-dismiss.
+function wm:drawNotification()
+    local note = self.notifications[1]
+    if not note then
+        self.notifyX1 = nil
+        return
+    end
+    local t = self.nativeTerm
+    local w = math.min(self.screenW - 2, 40)
+    local h = 4
+    local x = self.screenW - w + 1
+    local y = 1
+
+    local bg = pickColor(self.isColor, colors.red, colors.black)
+    for row = 0, h - 1 do
+        t.setCursorPos(x, y + row)
+        t.setBackgroundColor(bg)
+        t.write(string.rep(" ", w))
+    end
+
+    t.setTextColor(colors.white)
+    t.setCursorPos(x + 1, y)
+    t.write(note.title:sub(1, w - 4))
+
+    t.setCursorPos(x + w - 2, y)
+    t.setBackgroundColor(pickColor(self.isColor, colors.white, colors.black))
+    t.setTextColor(pickColor(self.isColor, colors.black, colors.white))
+    t.write("x")
+    t.setBackgroundColor(bg)
+    t.setTextColor(colors.white)
+
+    local message = note.message:gsub("\n", " ")
+    t.setCursorPos(x + 1, y + 1)
+    t.write(message:sub(1, w - 2))
+    t.setCursorPos(x + 1, y + 2)
+    t.write(message:sub(w - 1, w - 1 + w - 3))
+
+    t.setCursorPos(x + 1, y + 3)
+    t.setTextColor(pickColor(self.isColor, colors.lightGray, colors.white))
+    t.write("Click to dismiss")
+
+    self.notifyX1, self.notifyY1 = x, y
+    self.notifyX2, self.notifyY2 = x + w - 1, y + h - 1
+
+    t.setBackgroundColor(colors.black)
+    t.setTextColor(colors.white)
+end
+
 function wm:draw()
     local t = self.nativeTerm
     t.setBackgroundColor(pickColor(self.isColor, colors.cyan, colors.black))
@@ -494,6 +557,7 @@ function wm:draw()
 
     self:drawTaskbar()
     self:drawStartMenu()
+    self:drawNotification()
     t.setCursorBlink(false)
 end
 
@@ -579,6 +643,11 @@ function wm:handleScrollbarClick(entry, px, py)
 end
 
 function wm:handleMouseClick(button, px, py)
+    if self.notifyX1 and px >= self.notifyX1 and px <= self.notifyX2 and py >= self.notifyY1 and py <= self.notifyY2 then
+        table.remove(self.notifications, 1)
+        return
+    end
+
     if py == self.taskbarY and px >= self.startButtonX1 and px <= self.startButtonX2 then
         self.startMenuOpen = not self.startMenuOpen
         return
@@ -849,13 +918,19 @@ function wm:run()
     local clockTimer = os.startTimer(1)
 
     while self.running do
-        if #self.windows == 0 then
+        -- keep running while a notification is still queued even with
+        -- no windows left, so e.g. the last window crashing doesn't
+        -- exit CCIOS before its crash toast is ever shown
+        if #self.windows == 0 and #self.notifications == 0 then
             break
         end
         local event, a, b, c, d = os.pullEventRaw()
 
         if event == "timer" and a == clockTimer then
             clockTimer = os.startTimer(1)
+            if self.notifications[1] and os.clock() - self.notifications[1].time > 10 then
+                table.remove(self.notifications, 1)
+            end
         end
 
         local burstStart = os.clock()
