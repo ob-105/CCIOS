@@ -104,6 +104,51 @@ doesn't rely on CraftOS's own `term_resize` event at all — the WM
 already drives each app's coroutine directly, so it just delivers the
 event itself the moment it changes the window's buffer size.
 
+## The `_G.ccios` surface
+
+There isn't a formal kernel API yet, but apps that need to know
+something about the running system (the System Monitor being the first)
+read it from a small global table `boot.lua` sets up:
+
+```lua
+_G.ccios = {
+    wm = manager,       -- the live wm instance (see wm.lua)
+    root = "/ccios",
+}
+```
+
+Treat it as read-only/informational from app code — nothing enforces
+that, but poking `_G.ccios.wm`'s internals from an app would be reaching
+past the intended surface. Right now the only thing apps actually use
+off it is `wm.stats` (see below) and `#wm.windows` / `#wm.startMenuApps`
+for basic counts. This will likely grow into something more structured
+once there's a second or third app that needs it for something other
+than read-only stats (e.g. closing another window, or the app store
+installing something and wanting the Start menu to refresh).
+
+## Watchdog headroom (the System Monitor's "instruction limit" gauge)
+
+CraftOS doesn't expose a real instruction counter or "time remaining
+this burst" value to Lua scripts — the actual mechanism is a wall-clock
+watchdog: if a program runs for too long between yields (`os.pullEvent`
+calls), CraftOS kills it with a "Too long without yielding" error. Since
+every app in CCIOS runs *inside* the WM's own dispatch/draw cycle
+between its calls to `os.pullEventRaw()`, that cycle's duration is the
+real thing standing between "normal" and "the whole computer gets
+killed" — not any individual app's own event loop.
+
+`wm:run()` times each dispatch+draw cycle with `os.clock()` and tracks
+it in `self.stats = { lastBurst, maxBurst }` (seconds). The System
+Monitor reads `_G.ccios.wm.stats` and shows `maxBurst` as a fraction of
+CraftOS's commonly-cited ~7 second default budget. This is a proxy, not
+a measurement of the actual configured limit (which isn't queryable) —
+`os.clock()`'s resolution is tied to the server tick rate (~50ms), so
+fast cycles frequently read as 0. It's most useful for catching an app
+that's doing real work (a tight loop, a big computation) without
+yielding, which is also the one thing that can freeze or crash *all* of
+CCIOS at once, since it's all one Lua state — there's no per-window
+isolation the way real threads would give you.
+
 ## What's intentionally deferred
 
 - Surfacing app crash messages in the UI

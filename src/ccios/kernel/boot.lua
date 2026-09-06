@@ -63,6 +63,14 @@ end
 
 local manager = wm.new(term.current())
 
+-- A small read-only-by-convention surface so apps (e.g. the System
+-- Monitor) can query the running system without CCIOS needing a
+-- separate formal "kernel API" yet. Apps should treat _G.ccios as
+-- informational and not mutate it.
+_G.ccios = _G.ccios or {}
+_G.ccios.wm = manager
+_G.ccios.root = CCIOS_ROOT
+
 local screenW, screenH = term.current().getSize()
 
 local appsOk, appsModule = pcall(dofile, CCIOS_ROOT .. "/kernel/apps.lua")
@@ -74,14 +82,16 @@ manager.startMenuApps = installedApps
 -- easy to see and test. Wired up as the Start menu's launch callback.
 local spawnCounts = {}
 local function launchApp(m, app)
-    local baseX = math.max(1, math.floor((screenW - app.width) / 2) + 1)
-    local baseY = math.max(1, math.floor((screenH - 1 - app.height) / 2) + 1)
+    local w = math.min(app.width, screenW)
+    local h = math.min(app.height, screenH - 1) -- leave room for the taskbar
+    local baseX = math.max(1, math.floor((screenW - w) / 2) + 1)
+    local baseY = math.max(1, math.floor((screenH - 1 - h) / 2) + 1)
     local count = spawnCounts[app.id] or 0
     local step = count % 6
-    local x = math.min(baseX + step * 2, math.max(1, screenW - app.width + 1))
-    local y = math.min(baseY + step, math.max(1, screenH - 1 - app.height + 1))
+    local x = math.min(baseX + step * 2, math.max(1, screenW - w + 1))
+    local y = math.min(baseY + step, math.max(1, screenH - 1 - h + 1))
     spawnCounts[app.id] = count + 1
-    m:launch(app.entry, app.name, x, y, app.width, app.height)
+    m:launch(app.entry, app.name, x, y, w, h)
 end
 
 manager.onLaunchApp = launchApp

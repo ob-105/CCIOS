@@ -45,6 +45,14 @@ function wm.new(nativeTerm)
     self.onLaunchApp = nil
     self.startMenuOpen = false
 
+    -- How long each dispatch+draw cycle took, in seconds, and the worst
+    -- seen this session. CraftOS kills a program that runs too long
+    -- without yielding back to the game (~7s by default); since the WM
+    -- loop is what everything runs inside of between yields, this is a
+    -- reasonable proxy for "how close did we get to that limit", surfaced
+    -- to apps (e.g. the System Monitor) via self.stats.
+    self.stats = { lastBurst = 0, maxBurst = 0 }
+
     return self
 end
 
@@ -527,8 +535,16 @@ function wm:run()
             break
         end
         local event, a, b, c, d = os.pullEventRaw()
+
+        local burstStart = os.clock()
         self:dispatch(event, a, b, c, d)
         self:draw()
+        local burst = os.clock() - burstStart
+
+        self.stats.lastBurst = burst
+        if burst > self.stats.maxBurst then
+            self.stats.maxBurst = burst
+        end
     end
 
     self.nativeTerm.setBackgroundColor(colors.black)

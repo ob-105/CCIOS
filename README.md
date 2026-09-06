@@ -7,8 +7,8 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Steps 1-3 (window manager, multiple windows, Start menu) — tested in-game, working.**
-**Step 4 (resizable windows) — done, pending in-game testing.**
+**Steps 1-4 (window manager, multiple windows, Start menu, resizing) — tested in-game, working.**
+**Step 5 (System Monitor app) — done, pending in-game testing.**
 
 - Floating, draggable, closable, resizable windows with title bars
 - Multiple windows at once; focusing a window (by clicking it, or
@@ -22,7 +22,8 @@ Built one part at a time, bug-tested manually in-game after each step.
 - Works on color (Advanced) and mono (standard) screens
 - Apps are ordinary CraftOS programs (`term.*` / `os.pullEvent`) — no
   special API required to write one
-- "About CCIOS" app running as the first window(s)
+- "About CCIOS" and "System Monitor" (disk usage, watchdog headroom,
+  memory, open windows, peripherals) apps, both in the Start menu
 - Auto-updater: checks GitHub for a newer `manifest.json` on boot (asks
   before installing), plus a manual `update` shell command
 
@@ -72,6 +73,9 @@ src/
     apps/
       about/
         main.lua            -- About CCIOS app
+        manifest.json       -- app metadata
+      sysmon/
+        main.lua            -- System Monitor app
         manifest.json       -- app metadata
 docs/
   ARCHITECTURE.md

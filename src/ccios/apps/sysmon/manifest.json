@@ -1,0 +1,12 @@
+{
+    "id": "sysmon",
+    "name": "System Monitor",
+    "version": "0.1.0",
+    "author": "CCIOS",
+    "entry": "main.lua",
+    "description": "Disk usage, watchdog headroom, memory, and other system stats.",
+    "window": {
+        "width": 42,
+        "height": 16
+    }
+}

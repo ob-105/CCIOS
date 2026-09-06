@@ -1,5 +1,48 @@
 # Dev log
 
+## Step 5 — System Monitor app (2026-09-06)
+
+Confirmed working in-game: steps 1-4.
+
+Built:
+
+- `src/ccios/apps/sysmon/` — second real app, shows:
+  - Disk usage (`fs.getFreeSpace`/`fs.getCapacity` on `/`), with a bar
+  - "Watchdog headroom" — see docs/ARCHITECTURE.md's new section; this is
+    an *approximation* of how close the computer is coming to CraftOS's
+    "too long without yielding" kill switch, not a real instruction
+    counter (CraftOS doesn't expose one). Worth reading that section
+    before trusting the number.
+  - Lua memory (`collectgarbage("count")`, if available)
+  - Open window count / installed app count
+  - Peripheral count (`peripheral.getNames()`)
+  - Uptime (`os.clock()`), computer ID, CraftOS version, screen size
+  - Refreshes every second and on resize
+- `_G.ccios` global surface (`boot.lua`) exposing the live WM instance
+  to apps — first real "kernel API" surface, currently just informational
+- `wm:run()` now times each dispatch+draw cycle and tracks the worst one
+  seen (`self.stats.lastBurst` / `maxBurst`) — this is what sysmon's
+  watchdog gauge reads
+- Bug fix while wiring this up: `boot.lua`'s `launchApp` didn't clamp an
+  app's requested window size to the actual screen size, so a wide app
+  (sysmon defaults to 42 wide) could hang off the edge of a small pocket
+  computer screen. Now clamped the same way the original About window
+  always was.
+
+### Things to specifically check when testing
+
+- [ ] System Monitor appears in the Start menu and opens correctly
+- [ ] Disk numbers look plausible (compare against `fs.getFreeSpace("/")`
+      typed directly in the shell)
+- [ ] Values update every second without flicker/tearing
+- [ ] Resizing the System Monitor window reflows its content instead of
+      leaving stale text
+- [ ] On a pocket computer's small screen, the window (now clamped)
+      doesn't hang off the edge, and text doesn't get too cramped to read
+- [ ] Watchdog gauge reads near 0% during normal use; worth trying to
+      intentionally add a slow/busy app later to confirm it actually
+      moves (not required for this step, just noting for later)
+
 ## Step 4 — Resizable windows (2026-09-06)
 
 Confirmed working in-game: steps 1-3.
