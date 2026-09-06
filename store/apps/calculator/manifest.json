@@ -1,0 +1,12 @@
+{
+    "id": "calculator",
+    "name": "Calculator",
+    "version": "1.0.0",
+    "author": "CCIOS",
+    "entry": "main.lua",
+    "description": "A simple four-function calculator.",
+    "window": {
+        "width": 20,
+        "height": 12
+    }
+}

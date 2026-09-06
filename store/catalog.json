@@ -1,0 +1,17 @@
+{
+    "apps": [
+        {
+            "id": "calculator",
+            "name": "Calculator",
+            "description": "A simple four-function calculator.",
+            "version": "1.0.0",
+            "author": "CCIOS",
+            "path": "store/apps/calculator",
+            "banner": [
+                ["blue", "blue", "blue"],
+                ["blue", "white", "blue"],
+                ["blue", "blue", "blue"]
+            ]
+        }
+    ]
+}

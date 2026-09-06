@@ -7,8 +7,8 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Steps 1-11 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor, New File/Save As picker, configurable close button, right-click menus/clock/maximize, system scrollbars) — tested in-game, working.**
-**Step 12 (crash notifications, Settings, Task Manager) — done, pending in-game testing.**
+**Steps 1-12 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor, New File/Save As picker, configurable close button, right-click menus/clock/maximize, system scrollbars, crash notifications/Settings/Task Manager) — tested in-game, working.**
+**Step 13 (App Store) — done, pending in-game testing.**
 
 - Floating, draggable, closable, resizable, maximizable windows with
   title bars
@@ -33,7 +33,14 @@ Built one part at a time, bug-tested manually in-game after each step.
   special API required to write one
 - "About CCIOS", "System Monitor" (disk usage, watchdog headroom,
   memory, open windows, peripherals), "File Explorer", "Text Editor",
-  "Settings", and "Task Manager" apps, all in the Start menu
+  "Settings", "Task Manager", and "App Store" apps, all in the Start menu
+- App Store: browses a GitHub-hosted catalog as a grid of 3x3-pixel
+  banner tiles; click one for its page (description, author, latest vs.
+  installed version, Install/Update/Delete). Installing just drops a
+  normal `/ccios/apps/<id>/` folder — the same shape every other app
+  already has — and refreshes the Start menu immediately, no reboot
+  needed. Ships with one real optional app (a four-function Calculator)
+  to prove the whole pipeline end to end.
 - A crashed app now shows a dismissable toast with its error message
   instead of just silently vanishing
 - Settings: toggle the auto-update-on-boot check, or check for updates
@@ -127,6 +134,15 @@ src/
       taskmgr/
         main.lua            -- Task Manager app
         manifest.json       -- app metadata
+      appstore/
+        main.lua            -- App Store app
+        manifest.json       -- app metadata
+store/
+  catalog.json                -- App Store's catalog: id/name/description/version/banner/path per app
+  apps/
+    calculator/
+      main.lua                -- optional app, installed on demand via the App Store (not bundled)
+      manifest.json
 docs/
   ARCHITECTURE.md
   DEV_LOG.md
@@ -134,9 +150,9 @@ docs/
 
 ## Roadmap
 
-1. **Window manager + About app** (this step)
-2. App launcher / start menu, multiple simultaneous windows
-3. App store: browsing, install/update/remove from GitHub-hosted app repo
-4. App developer documentation + app submission process
-5. Core apps (file manager, settings, terminal, text editor, ...)
-6. Pocket-computer specific UX polish
+1. ~~Window manager + About app~~ — done (step 1)
+2. ~~App launcher / start menu, multiple simultaneous windows~~ — done (steps 2-3)
+3. ~~App store: browsing, install/update/remove from GitHub-hosted app repo~~ — done (step 13); all apps currently live in this same repo under `store/apps/`, not yet a multi-author/multi-repo catalog
+4. App developer documentation + app submission process — not started
+5. ~~Core apps~~ — file manager, settings, text editor, task manager all done; still no terminal
+6. Pocket-computer specific UX polish — not started

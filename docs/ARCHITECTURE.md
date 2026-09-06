@@ -519,6 +519,77 @@ window this way; that's harmless (see `wm:closeWindow` - it just leaves
 that coroutine parked at its next `os.pullEvent()` forever, eventually
 garbage collected, same as any other closed window's coroutine).
 
+## App Store
+
+`src/ccios/apps/appstore/main.lua` fetches `store/catalog.json` from
+the CCIOS GitHub repo — a plain JSON array of `{id, name, description,
+version, author, path, banner}` — and renders it as a grid of tiles,
+each showing a 3x3 "pixel" banner (see below) and the app's name.
+Clicking a tile opens a detail screen (description, author, latest
+version from the catalog vs. installed version read from
+`/ccios/apps/<id>/manifest.json` if it exists) with Install/Update/
+Delete buttons chosen based on that comparison — no button at all if
+already installed and current except Delete, both Update and Delete if
+installed but a different version, just Install if not installed at
+all. Version comparison is plain string inequality, not real semver
+ordering: good enough for a single-maintainer catalog where "different"
+already means "worth reinstalling," not worth the edge cases a real
+version-ordering comparison would need to get right.
+
+**Installing** fetches `<path>/manifest.json` and `<path>/main.lua` from
+the repo and writes them to a new `/ccios/apps/<id>/` folder — exactly
+the shape `apps.lua` already scans for the Start menu, so nothing about
+app discovery needed to change for this feature at all. The one thing
+App Store does that a plain file copy wouldn't is call `apps.lua`'s
+`discover()` again immediately afterward and overwrite
+`_G.ccios.wm.startMenuApps` with the result, so a freshly installed app
+shows up in the Start menu right away instead of requiring a reboot.
+**Deleting** is a confirm (via `dialog.lua`, consistent with every other
+destructive action in CCIOS) followed by `fs.delete` and the same
+Start-menu refresh.
+
+**Banners** are a 3x3 array of CC color names (`"blue"`, `"white"`,
+etc.), each cell drawn as a 1x2-character block (two characters wide so
+it reads as roughly square in a monospace terminal, rather than the
+tall/narrow rectangle a single character would give a 3-row-tall icon).
+On a mono screen, "light" color names (white, yellow, lime, cyan,
+lightBlue, lightGray, pink, orange) collapse to white and everything
+else to black — a crude but workable approximation for reducing an
+arbitrary 16-color banner to 1 bit. This is the "simplified logo" an
+app author draws by hand in the catalog JSON, not an uploaded image —
+there's no image format CC:Tweaked terminals could show anyway.
+
+**Why store apps live in this same repo, not a separate one per app.**
+The `path` field in each catalog entry is a folder under `store/apps/`
+in the CCIOS repo itself (`store/apps/calculator`, for the one app that
+ships today), fetched via the same `raw.githubusercontent.com` pattern
+`updater.lua` already uses for core files. This is a deliberate v1
+scope cut, not the end state: a catalog entry doesn't currently carry
+its own repo owner/name, so every app in the store has to be something
+that got merged into this repo. Making that a per-entry field instead
+of an assumption is the natural next step once a second author wants to
+publish something without needing commit access here — see the
+deferred list below.
+
+**Security note, since this is the first feature where CCIOS downloads
+and runs code a user didn't write themselves**: installing an app
+executes whatever `main.lua` the catalog points at, with the same trust
+as any other CCIOS app (no sandboxing beyond what CC:Tweaked itself
+provides for any program). That's an acceptable risk today because the
+only publisher is this repo's own maintainer, but it's worth naming
+explicitly now rather than discovering it as a surprise later: a
+multi-author catalog would need real thought about trust before it's
+safe to point people at.
+
+**Why only single-file (`main.lua`) apps.** Installing hardcodes
+fetching exactly `manifest.json` and `main.lua` — matching every app
+CCIOS ships so far, including the store apps. An app needing more files
+(assets, a second module it `dofile`s) isn't supported by the installer
+yet; it would need the catalog entry or the app's own manifest to list
+its files explicitly, the same problem `install.lua`/`manifest.json`
+already solved for core files - reusing that shape here is the obvious
+next step if it's ever needed.
+
 ## What's intentionally deferred
 
 - Forwarding the *real* `term_resize` (the physical screen resizing) to
@@ -546,3 +617,13 @@ garbage collected, same as any other closed window's coroutine).
 - Task Manager: no per-window resource stats (only the WM-wide
   watchdog headroom in System Monitor exists, not a per-window
   breakdown), no multi-select/end-multiple-at-once
+- App Store: multi-author/multi-repo catalog entries (see above),
+  multi-file app installs (see above), no search/categories/screenshots,
+  no rating/review system, no way to browse without a working `http`
+  API and a live GitHub connection (no offline catalog cache), no undo
+  after Delete beyond reinstalling, real semver-aware version comparison
+  instead of plain string inequality
+- App developer documentation: how to write an app, the manifest
+  schema, and how to actually get a new one added to `store/catalog.json`
+  (right now that's "make a PR/ask the maintainer," not a self-serve
+  submission process)

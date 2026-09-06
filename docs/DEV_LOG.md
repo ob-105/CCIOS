@@ -1,5 +1,67 @@
 # Dev log
 
+## Step 13 — App Store (2026-09-06)
+
+Confirmed working in-game: steps 1-12.
+
+The big one from the original vision: "a full app store... upload them
+to the app store." This is the first real cut of it - a working
+install/update/delete pipeline against a GitHub-hosted catalog, plus
+one real optional app to prove it end to end. Deliberately scoped down
+from "any author, any repo" to "apps living in this same repo" for v1;
+see docs/ARCHITECTURE.md for exactly where that line was drawn and why.
+
+Built:
+
+- `store/catalog.json` - the store's catalog: a flat list of
+  `{id, name, description, version, author, path, banner}`. `path`
+  points at a folder (in this same repo, for now) containing that app's
+  own `manifest.json` + `main.lua`.
+- `src/ccios/apps/appstore/` - grid of tiles (3x3-color-block "banner"
+  per app, drawn as 2-characters-wide-per-pixel so it reads roughly
+  square) that opens a detail page per app: description, author, latest
+  vs. installed version, and Install/Update/Delete depending on that
+  comparison.
+- Installing fetches the app's `manifest.json`/`main.lua` and writes
+  them to a plain `/ccios/apps/<id>/` folder - the exact shape every
+  other app already has, so `apps.lua`'s existing Start-menu scan picks
+  it up with zero changes. App Store also re-runs that scan itself
+  right after an install/delete and overwrites
+  `_G.ccios.wm.startMenuApps`, so the Start menu updates immediately
+  instead of needing a reboot.
+- `store/apps/calculator/` - a real, if simple, four-function
+  calculator - the first genuinely optional CCIOS app, not bundled by
+  default, installed the same way any future store app would be.
+- Caught and fixed a real bug while writing this: `installApp`/
+  `deleteApp` call `draw()` mid-function to show progress before a
+  network call blocks, but were defined *before* `draw` in the file -
+  Lua resolves that as an undefined global, not the local defined later.
+  Fixed with a forward declaration (`local draw` up top, `draw =
+  function() ... end` where it used to say `local function draw()`).
+
+### Things to specifically check when testing
+
+- [ ] App Store opens, shows "Loading...", then the Calculator tile
+      with its blue/white banner
+- [ ] Clicking the tile opens its detail page with the right
+      description, author, and "Latest version" / "Installed: not
+      installed"
+- [ ] Clicking Install actually downloads it, and Calculator
+      immediately appears in the Start menu without rebooting
+- [ ] Opening Calculator from the Start menu works and does correct
+      arithmetic (try a chained operation like `5 + 3 + 2 =`, and a
+      division that doesn't come out even, e.g. `1 / 3 =`)
+- [ ] Back in the App Store, the same app's detail page now shows
+      "Installed: 1.0.0" and offers Delete (no Update, since the
+      version matches)
+- [ ] Clicking Delete confirms first, then removes it from the Start
+      menu immediately
+- [ ] With `http` disabled (or no network), the App Store shows a
+      readable error instead of hanging or crashing
+- [ ] Everything still renders sensibly on a mono (standard) screen -
+      the banner should still be visibly distinct from the background,
+      just not colorful
+
 ## Step 12 — Crash notifications, Settings, Task Manager (2026-09-06)
 
 Confirmed working in-game: steps 1-11.

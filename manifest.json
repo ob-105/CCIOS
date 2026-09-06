@@ -1,5 +1,5 @@
 {
-    "version": "0.12.0",
+    "version": "0.13.0",
     "files": [
         { "src": "src/startup.lua",                       "dest": "/startup.lua" },
         { "src": "src/update.lua",                        "dest": "/update.lua" },
@@ -19,6 +19,8 @@
         { "src": "src/ccios/apps/settings/main.lua",       "dest": "/ccios/apps/settings/main.lua" },
         { "src": "src/ccios/apps/settings/manifest.json",  "dest": "/ccios/apps/settings/manifest.json" },
         { "src": "src/ccios/apps/taskmgr/main.lua",        "dest": "/ccios/apps/taskmgr/main.lua" },
-        { "src": "src/ccios/apps/taskmgr/manifest.json",   "dest": "/ccios/apps/taskmgr/manifest.json" }
+        { "src": "src/ccios/apps/taskmgr/manifest.json",   "dest": "/ccios/apps/taskmgr/manifest.json" },
+        { "src": "src/ccios/apps/appstore/main.lua",       "dest": "/ccios/apps/appstore/main.lua" },
+        { "src": "src/ccios/apps/appstore/manifest.json",  "dest": "/ccios/apps/appstore/manifest.json" }
     ]
 }

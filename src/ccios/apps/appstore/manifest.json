@@ -1,0 +1,13 @@
+{
+    "id": "appstore",
+    "name": "App Store",
+    "version": "0.1.0",
+    "author": "CCIOS",
+    "entry": "main.lua",
+    "description": "Browse, install, and remove optional CCIOS apps.",
+    "window": {
+        "width": 44,
+        "height": 18,
+        "virtualHeight": 40
+    }
+}
