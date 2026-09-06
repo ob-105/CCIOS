@@ -6,6 +6,8 @@
 
 local path = ...
 
+local EXPLORER_ENTRY = "/ccios/apps/explorer/main.lua"
+
 local dialogOk, dialog = pcall(dofile, "/ccios/kernel/dialog.lua")
 if not dialogOk then
     dialog = nil
@@ -52,45 +54,54 @@ local function currentLine()
     return lines[cursorRow] or ""
 end
 
-local function promptSavePath()
-    local w, h = term.getSize()
-    term.setCursorPos(1, h)
-    term.setBackgroundColor(colors.black)
-    term.setTextColor(colors.white)
-    term.write(string.rep(" ", w))
-    term.setCursorPos(1, h)
-    term.write("Save as: ")
-    term.setCursorBlink(true)
-    local newPath = read()
-    term.setCursorBlink(false)
-    if not newPath or newPath == "" then
-        return nil
-    end
-    if not newPath:match("^/") then
-        newPath = "/" .. newPath
-    end
-    return newPath
-end
+-- Set while a Save As picker window is open for this buffer, so the
+-- "ccios_save_dialog_result" event this coroutine eventually receives
+-- (broadcast, see wm.lua's event routing) can be matched back to this
+-- request rather than some other Editor window's.
+local pickerRequestId = nil
 
-local function save()
-    if not path then
-        local newPath = promptSavePath()
-        if not newPath then
-            status = "Save cancelled"
-            return
-        end
-        path = newPath
-    end
+local function writeToPath(p)
     local content = table.concat(lines, "\n")
-    local f = fs.open(path, "w")
+    local f = fs.open(p, "w")
     if not f then
-        status = "Save failed: could not open " .. path
-        return
+        status = "Save failed: could not open " .. p
+        return false
     end
     f.write(content)
     f.close()
     modified = false
-    status = "Saved " .. path
+    status = "Saved " .. p
+    return true
+end
+
+-- Opens the File Explorer as a "Save As" picker: browse to any folder,
+-- click Save, type a name. See docs/ARCHITECTURE.md for why the result
+-- comes back as a queued event rather than a callback function.
+local function requestSaveAs()
+    if not (_G.ccios and _G.ccios.launch) then
+        status = "Can't open Save As outside CCIOS"
+        return
+    end
+    pickerRequestId = tostring({})
+    local suggested = (path and fs.getName and fs.getName(path)) or "untitled.txt"
+    local ok, err = pcall(_G.ccios.launch, {
+        id = "saveas:" .. pickerRequestId, name = "Save As", entry = EXPLORER_ENTRY,
+        width = 46, height = 18, args = { "save", pickerRequestId, suggested },
+    })
+    if not ok then
+        status = "Could not open Save As: " .. tostring(err)
+        pickerRequestId = nil
+    else
+        status = "Choose a location in the Save As window"
+    end
+end
+
+local function save()
+    if not path then
+        requestSaveAs()
+        return
+    end
+    writeToPath(path)
 end
 
 -- Returns true if it's fine to close (no unsaved changes, or the user
@@ -356,6 +367,14 @@ while not closing do
         handleKeyUp(p1)
     elseif event == "mouse_click" then
         handleClick(p2, p3)
+    elseif event == "ccios_save_dialog_result" and pickerRequestId and p1 == pickerRequestId then
+        pickerRequestId = nil
+        if p2 then
+            path = p2
+            writeToPath(path)
+        else
+            status = "Save As cancelled"
+        end
     end
 
     if not closing then

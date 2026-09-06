@@ -2,12 +2,18 @@
 -- A normal CraftOS program (see docs/ARCHITECTURE.md). Browses the
 -- filesystem, launches .lua files as windows via _G.ccios.launch (the
 -- same cascaded/clamped placement the Start menu uses), opens any file
--- in the Text Editor via the Menu dropdown, supports copy/cut/paste and
--- delete (cut and delete confirm first via the shared dialog helper),
--- and accepts files dragged onto the Minecraft window (the
--- "file_transfer" event) into whatever directory is currently open.
+-- in the Text Editor via the Menu dropdown, supports copy/cut/paste,
+-- delete, new file/folder (cut, delete, and overwriting all confirm
+-- first via the shared dialog helper), accepts files dragged onto the
+-- Minecraft window (the "file_transfer" event) into whatever directory
+-- is currently open, and can run as a "Save As" picker for the Text
+-- Editor (see the "Save As picker mode" section below).
 
 local EDITOR_ENTRY = "/ccios/apps/editor/main.lua"
+
+-- pickerMode == "save" when launched by the Text Editor to pick a save
+-- location; see "Save As picker mode" below.
+local pickerMode, pickerRequestId, pickerSuggestedName = ...
 
 local dialogOk, dialog = pcall(dofile, "/ccios/kernel/dialog.lua")
 if not dialogOk then
@@ -71,6 +77,20 @@ local function listDir(path)
     return entries
 end
 
+local function promptText(label, default)
+    local w, h = term.getSize()
+    term.setCursorPos(1, h)
+    term.setBackgroundColor(colors.black)
+    term.setTextColor(colors.white)
+    term.write(string.rep(" ", w))
+    term.setCursorPos(1, h)
+    term.write(label)
+    term.setCursorBlink(true)
+    local text = read(nil, nil, nil, default)
+    term.setCursorBlink(false)
+    return text
+end
+
 -- ---------------------------------------------------------------------
 -- State
 -- ---------------------------------------------------------------------
@@ -79,13 +99,16 @@ local currentPath = "/"
 local entries = listDir(currentPath)
 local selected = #entries > 0 and 1 or 0
 local scroll = 0
-local status = nil
+local status = pickerMode == "save" and "Choose a folder, then click Save" or nil
 local lastClick = nil -- { index=, time= } for double-click detection
+local lastSelectedFileName = nil -- prefill hint for the save-as filename prompt
 local clipboard = nil -- { path=, name=, isDir=, mode="copy"|"cut" }
+local closing = false
 
 local menuOpen = false
 local menuItems = {}
 local menuButtonX1, menuButtonX2
+local saveBtnX1, saveBtnX2, cancelBtnX1, cancelBtnX2
 local menuX1, menuY1, menuX2, menuY2
 
 local LIST_TOP = 4 -- row the file list starts on (below title, path, separator)
@@ -251,6 +274,43 @@ local function doPaste()
     end
 end
 
+local function doNewFile()
+    local name = promptText("New file name: ", "")
+    if not name or name == "" then
+        status = "Cancelled"
+        return
+    end
+    local full = joinPath(currentPath, name)
+    if fs.exists(full) then
+        status = "Already exists: " .. name
+        return
+    end
+    local f = fs.open(full, "w")
+    if not f then
+        status = "Could not create " .. name
+        return
+    end
+    f.close()
+    refresh()
+    status = "Created " .. name
+end
+
+local function doNewFolder()
+    local name = promptText("New folder name: ", "")
+    if not name or name == "" then
+        status = "Cancelled"
+        return
+    end
+    local full = joinPath(currentPath, name)
+    if fs.exists(full) then
+        status = "Already exists: " .. name
+        return
+    end
+    fs.makeDir(full)
+    refresh()
+    status = "Created folder " .. name
+end
+
 local function buildMenuItems()
     local items = {}
     local e = selected >= 1 and entries[selected] or nil
@@ -274,11 +334,72 @@ local function buildMenuItems()
         table.insert(items, { label = "Paste", action = doPaste })
     end
 
-    if #items == 0 then
-        table.insert(items, { label = "(no actions)", action = nil })
-    end
+    table.insert(items, { label = "New File", action = doNewFile })
+    table.insert(items, { label = "New Folder", action = doNewFolder })
 
     return items
+end
+
+-- ---------------------------------------------------------------------
+-- Save As picker mode
+--
+-- The Text Editor, when saving a buffer with no path yet, launches this
+-- same app with args {"save", requestId, suggestedName} instead of a
+-- normal window. Browsing works exactly as normal, but the Menu button
+-- (and everything it offers, including New Folder) is hidden in this
+-- mode - clicking [Save] prompts for a filename and, once confirmed,
+-- reports the chosen path back to the Editor and closes.
+--
+-- The result travels back via os.queueEvent rather than calling a
+-- function the Editor passed in directly: this coroutine and the
+-- Editor's are resumed independently by the WM, each with `term`
+-- redirected to its own window, so directly invoking a closure that
+-- belongs to the Editor's coroutine from inside this one would draw
+-- into the wrong window. Queuing a broadcast event instead means the
+-- Editor updates its own state and redraws itself, on its own
+-- coroutine, exactly like handling any other event - see
+-- docs/ARCHITECTURE.md.
+-- ---------------------------------------------------------------------
+
+local function finishSave(name)
+    if not name or name == "" then
+        status = "Enter a filename"
+        return
+    end
+    local fullPath = joinPath(currentPath, name)
+    if fs.exists(fullPath) then
+        if not dialog or not dialog.confirm(("Overwrite existing '%s'?"):format(name)) then
+            status = "Cancelled"
+            return
+        end
+    end
+    os.queueEvent("ccios_save_dialog_result", pickerRequestId, fullPath)
+    closing = true
+end
+
+local function cancelSave()
+    os.queueEvent("ccios_save_dialog_result", pickerRequestId, nil)
+    closing = true
+end
+
+-- In picker mode, "opening" an entry means picking it (a file) or
+-- navigating into it (a folder) - never running/editing.
+local function pickerOpenEntry(index)
+    local e = entries[index]
+    if not e then
+        return
+    end
+    if e.isParent then
+        currentPath = parentPath(currentPath)
+        refresh()
+        return
+    end
+    if e.isDir then
+        currentPath = joinPath(currentPath, e.name)
+        refresh()
+    else
+        finishSave(e.name)
+    end
 end
 
 -- ---------------------------------------------------------------------
@@ -324,17 +445,38 @@ local function draw()
     term.clear()
 
     term.setCursorPos(2, 1)
-    term.write("File Explorer")
+    term.write(pickerMode == "save" and "Save As" or "File Explorer")
 
-    local menuLabel = " Menu "
-    menuButtonX2 = w
-    menuButtonX1 = w - #menuLabel + 1
-    term.setCursorPos(menuButtonX1, 1)
-    term.setBackgroundColor(menuOpen and pickColor(colors.white, colors.black) or pickColor(colors.blue, colors.black))
-    term.setTextColor(menuOpen and pickColor(colors.black, colors.white) or pickColor(colors.white, colors.white))
-    term.write(menuLabel)
-    term.setBackgroundColor(colors.black)
-    term.setTextColor(colors.white)
+    if pickerMode == "save" then
+        local saveLabel, cancelLabel = " Save ", " Cancel "
+        cancelBtnX2 = w
+        cancelBtnX1 = w - #cancelLabel + 1
+        saveBtnX2 = cancelBtnX1 - 2
+        saveBtnX1 = saveBtnX2 - #saveLabel + 1
+
+        term.setCursorPos(saveBtnX1, 1)
+        term.setBackgroundColor(pickColor(colors.green, colors.black))
+        term.setTextColor(colors.white)
+        term.write(saveLabel)
+
+        term.setCursorPos(cancelBtnX1, 1)
+        term.setBackgroundColor(pickColor(colors.red, colors.black))
+        term.setTextColor(colors.white)
+        term.write(cancelLabel)
+
+        term.setBackgroundColor(colors.black)
+        term.setTextColor(colors.white)
+    else
+        local menuLabel = " Menu "
+        menuButtonX2 = w
+        menuButtonX1 = w - #menuLabel + 1
+        term.setCursorPos(menuButtonX1, 1)
+        term.setBackgroundColor(menuOpen and pickColor(colors.white, colors.black) or pickColor(colors.blue, colors.black))
+        term.setTextColor(menuOpen and pickColor(colors.black, colors.white) or pickColor(colors.white, colors.white))
+        term.write(menuLabel)
+        term.setBackgroundColor(colors.black)
+        term.setTextColor(colors.white)
+    end
 
     term.setCursorPos(2, 2)
     term.write(currentPath:sub(1, math.max(0, w - 2)))
@@ -372,7 +514,14 @@ local function draw()
 
     term.setCursorPos(1, h)
     term.setTextColor(pickColor(colors.lightGray, colors.white))
-    local help = status or "Enter/dbl-click: open  Menu: actions  drag a file in to copy it here"
+    local help
+    if status then
+        help = status
+    elseif pickerMode == "save" then
+        help = "Click a file to select it, or click Save to name a new one"
+    else
+        help = "Enter/dbl-click: open  Menu: actions  drag a file in to copy it here"
+    end
     term.write(help:sub(1, w))
     term.setTextColor(colors.white)
 
@@ -384,7 +533,17 @@ end
 -- ---------------------------------------------------------------------
 
 local function handleClick(px, py)
-    if py == 1 and menuButtonX1 and px >= menuButtonX1 and px <= menuButtonX2 then
+    if pickerMode == "save" and py == 1 then
+        if px >= saveBtnX1 and px <= saveBtnX2 then
+            local name = promptText("Save as: ", lastSelectedFileName or pickerSuggestedName or "")
+            finishSave(name)
+        elseif px >= cancelBtnX1 and px <= cancelBtnX2 then
+            cancelSave()
+        end
+        return
+    end
+
+    if pickerMode ~= "save" and py == 1 and menuButtonX1 and px >= menuButtonX1 and px <= menuButtonX2 then
         if menuOpen then
             menuOpen = false
         else
@@ -410,25 +569,37 @@ local function handleClick(px, py)
         return
     end
     local index = scroll + (py - LIST_TOP + 1)
-    if not entries[index] then
+    local e = entries[index]
+    if not e then
         return
     end
 
     local now = os.clock()
     if lastClick and lastClick.index == index and (now - lastClick.time) < 0.5 then
         lastClick = nil
-        openEntry(index)
+        if pickerMode == "save" then
+            pickerOpenEntry(index)
+        else
+            openEntry(index)
+        end
     else
         selected = index
         status = nil
         lastClick = { index = index, time = now }
+        if pickerMode == "save" and not e.isDir then
+            lastSelectedFileName = e.name
+        end
     end
 end
 
 local function handleKey(key)
     if key == keys.enter then
         if selected >= 1 then
-            openEntry(selected)
+            if pickerMode == "save" then
+                pickerOpenEntry(selected)
+            else
+                openEntry(selected)
+            end
         end
     elseif key == keys.backspace then
         if currentPath ~= "/" then
@@ -452,6 +623,8 @@ local function handleKey(key)
             selected = math.max(1, math.min(#entries, selected + delta))
         end
         status = nil
+    elseif pickerMode == "save" and key == keys.escape then
+        cancelSave()
     end
 end
 
@@ -484,7 +657,7 @@ end
 
 draw()
 
-while true do
+while not closing do
     local event, p1, p2, p3 = os.pullEvent()
 
     if event == "mouse_click" then
@@ -497,5 +670,7 @@ while true do
         -- layout may have changed; nothing else to do, draw() handles it
     end
 
-    draw()
+    if not closing then
+        draw()
+    end
 end

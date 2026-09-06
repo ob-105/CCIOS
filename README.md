@@ -7,8 +7,8 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Steps 1-6 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer) — tested in-game, working.**
-**Step 7 (Text Editor + Explorer menu/clipboard) — done, pending in-game testing.**
+**Steps 1-7 (window manager, multiple windows, Start menu, resizing, System Monitor, File Explorer, Text Editor) — tested in-game, working.**
+**Step 8 (New File/Folder + Save As picker) — done, pending in-game testing.**
 
 - Floating, draggable, closable, resizable windows with title bars
 - Multiple windows at once; focusing a window (by clicking it, or
@@ -28,12 +28,14 @@ Built one part at a time, bug-tested manually in-game after each step.
 - File Explorer: browse folders, double-click (or Enter) a `.lua` file
   to run it, drag-and-drop a file onto the Minecraft window to copy it
   into whatever folder is currently open, and a Menu button (top-right)
-  with contextual actions — Run/Edit/Copy/Cut/Delete/Paste — for the
-  selected file or folder. Cut, Delete, and pasting over an existing
-  file all confirm first via a shared modal dialog.
+  with contextual actions — Run/Edit/Copy/Cut/Delete/Paste/New
+  File/New Folder. Cut, Delete, and pasting over an existing file all
+  confirm first via a shared modal dialog.
 - Text Editor: plain-text/Lua editing with save (Ctrl+S or a button),
   opened from Explorer's Menu (any file type) or directly from the
-  Start menu (blank document)
+  Start menu (blank document). Saving a document with no path yet opens
+  the File Explorer as a "Save As" picker — browse to any folder, click
+  Save, type a name — the same way Windows does it.
 - Auto-updater: checks GitHub for a newer `manifest.json` on boot (asks
   before installing), plus a manual `update` shell command
 

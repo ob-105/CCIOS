@@ -180,14 +180,18 @@ choices:
   always lands in whichever folder the *focused* Explorer window has
   open — if Explorer isn't the focused window, it doesn't receive the
   event at all.
-- **The Menu button** (top-right of the window) opens a dropdown built
-  fresh each time from the currently-selected entry: a directory gets
-  `Open`; a `.lua` file gets `Run` and `Edit`; anything else gets just
-  `Edit`; everything gets `Copy`/`Cut`/`Delete`; `Paste` only appears
-  once something's on the clipboard. It's implemented the same way as
-  the WM's own Start menu (a button that toggles a positioned list,
-  click-away to dismiss) — there wasn't a reason to generalize that
-  pattern into `wm.lua` since only Explorer needs it so far.
+- **The Menu button** (top-right of the window, hidden in Save As picker
+  mode — see below) opens a dropdown built fresh each time from the
+  currently-selected entry: a directory gets `Open`; a `.lua` file gets
+  `Run` and `Edit`; anything else gets just `Edit`; everything gets
+  `Copy`/`Cut`/`Delete`; `Paste` only appears once something's on the
+  clipboard; `New File`/`New Folder` are always there regardless of
+  selection (they prompt for a name via a blocking `read()`, same
+  technique as the Save As prompt below, and act on `currentPath`, not
+  the selected entry). It's implemented the same way as the WM's own
+  Start menu (a button that toggles a positioned list, click-away to
+  dismiss) — there wasn't a reason to generalize that pattern into
+  `wm.lua` since only Explorer needs it so far.
 - **Clipboard**: `Copy`/`Cut` just remember `{path, name, isDir, mode}`
   locally (no confirmation needed — nothing on disk changes yet). `Cut`
   *does* confirm despite being non-destructive at that point, because
@@ -200,7 +204,55 @@ choices:
   `args` field (see below). This is how "open non-Lua files" is
   implemented: not a viewer built into Explorer, just handing the file
   to another app that already knows how to show text.
-- Rename and "new file/folder" are explicitly **not** implemented yet.
+- Rename is explicitly **not** implemented yet.
+
+## Save As picker mode (cross-app communication without an IPC system)
+
+The Text Editor doesn't have its own "browse for a folder" UI. Instead,
+saving a buffer with no path yet launches File Explorer itself with
+extra arguments — `local pickerMode, pickerRequestId, pickerSuggestedName
+= ...` at the top of `explorer/main.lua` — which switches its header to
+`Save`/`Cancel` buttons (hiding the Menu button), makes clicking a file
+select it instead of running/editing it, and makes double-click/Enter on
+a file mean "use this name" instead of "open it". Clicking `Save`
+prompts for a filename (pre-filled, editable, same `read(nil, nil, nil,
+default)` trick used elsewhere) and, once confirmed (with an
+overwrite-confirm if the name collides with something), needs to report
+the chosen path back to whichever Editor window asked for it.
+
+That report can't be a plain function call. Explorer and the Editor
+that launched it are two *independent* coroutines the WM resumes on its
+own schedule, each with `term` redirected to its own window right
+before resuming it (see "Core idea" above) — if Explorer's coroutine
+directly called a closure that belongs to the Editor's coroutine (e.g.
+one that calls the Editor's own `draw()`), that code would run while
+`term` is still redirected to *Explorer's* window, corrupting Explorer's
+display and leaving the Editor's window showing stale content. So
+instead Explorer does:
+
+```lua
+os.queueEvent("ccios_save_dialog_result", pickerRequestId, fullPath)
+```
+
+`os.queueEvent` puts a normal event on CraftOS's real event queue, which
+`wm.lua` picks up like any other event and — since it's not in the
+focused-only set — broadcasts to every window, including the Editor
+that's sitting at `os.pullEvent()` waiting for it. The Editor checks
+`p1 == pickerRequestId` (a fresh `tostring({})` per request, so multiple
+Editor windows each mid-save-as don't cross-match each other's results)
+and, if it matches, updates its own state and writes the file — all on
+its own coroutine, with `term` correctly redirected to its own window by
+the time the WM resumes it. This is the same "just send an event"
+pattern every other app already uses; it just happens to be one app
+sending it to another instead of the WM sending it to an app.
+
+If the picker window is closed via the title-bar `x` instead of
+`Cancel`, no result event is ever queued (there's no way for the WM's
+own close handling to run app code — see the deferred "OK to close?"
+item above) and the waiting Editor just... keeps waiting, silently,
+until the user tries Save again. Not a crash, just a dead end — the
+`Cancel` button and Escape key both exist specifically so there's an
+explicit way out that does report back.
 
 ## Confirmation dialogs (`dialog.lua`)
 
@@ -234,9 +286,9 @@ are plenty fast. A few things worth knowing:
   that flag when it sees `keys.s`. This is the same pattern CraftOS's
   own built-in `edit` program uses.
 - **Launched two ways**: from the Start menu with no arguments (blank,
-  untitled buffer — `Save` prompts for a path via a blocking `read()`,
-  same technique as `dialog.confirm`), or from Explorer's `Edit` action
-  with a file path as the first launch argument (`local path = ...`).
+  untitled buffer — `Save` opens the Save As picker described above), or
+  from Explorer's `Edit` action with a file path as the first launch
+  argument (`local path = ...`).
 - **Closing itself**: the in-app `Close` button confirms first if there
   are unsaved changes (via `dialog.confirm`), then just lets its own
   `while not closing do ... end` loop end and the file's top-level chunk
@@ -262,5 +314,6 @@ are plenty fast. A few things worth knowing:
   closes it — right now that always closes unconditionally, bypassing
   e.g. the Text Editor's unsaved-changes confirm (its own in-app Close
   button is the only closing path that checks)
-- File Explorer: rename, new file/folder, multi-select
+- File Explorer: rename, multi-select, creating a new folder from within
+  Save As picker mode (Menu is hidden there entirely right now)
 - Text Editor: syntax highlighting, find/replace, undo

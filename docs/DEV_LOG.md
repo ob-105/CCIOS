@@ -1,5 +1,64 @@
 # Dev log
 
+## Step 8 — New File/Folder, Save As picker (2026-09-06)
+
+Confirmed working in-game: steps 1-7.
+
+Built:
+
+- File Explorer's Menu gains `New File` and `New Folder`, always
+  available regardless of what's selected (they act on `currentPath`).
+  Both prompt for a name via the same blocking-`read()`-with-default
+  technique used elsewhere, refuse to overwrite an existing entry with
+  the same name (no confirm needed here — it just fails with a status
+  message rather than proceeding, since creating-with-collision isn't
+  really "destructive" the way overwriting content is), then refresh.
+- Text Editor's `Save` with no path set no longer prompts inline for a
+  path — it now launches File Explorer itself as a "Save As" picker:
+  browse to any folder, click `Save`, type a filename (pre-filled with
+  a suggested name, fully editable), confirm if it would overwrite
+  something. Same visual flow as Windows' save dialog, built by
+  repurposing Explorer rather than writing a second file-browsing UI.
+- The picker reports its result back to the Editor via
+  `os.queueEvent("ccios_save_dialog_result", requestId, path)` rather
+  than a direct callback, because Explorer and the Editor are separate
+  coroutines the WM redirects `term` for independently — see
+  docs/ARCHITECTURE.md's new "Save As picker mode" section for why a
+  direct closure call would have corrupted whichever window was on
+  screen at the time. `requestId` (a fresh `tostring({})` per request)
+  keeps multiple simultaneous Editor-picker pairs from cross-matching.
+- Known gap, called out in the architecture doc: if the picker window
+  is closed via the title-bar `x` instead of its own `Cancel`
+  button/Escape key, no result is ever sent and the Editor just keeps
+  waiting silently (not a crash - Save just never completes until tried
+  again). Wiring a real "window closed" notification into the WM is a
+  bigger change than this step warranted.
+
+### Things to specifically check when testing
+
+- [ ] Menu > New File / New Folder in Explorer both prompt, create the
+      right thing, and show up in the list afterward
+- [ ] Trying to create a file/folder with a name that already exists in
+      the current directory fails cleanly (status message, nothing
+      overwritten) instead of erroring
+- [ ] Text Editor: Ctrl+S (or the Save button) on a brand-new untitled
+      document opens a "Save As" Explorer window instead of the old
+      inline prompt
+- [ ] In the Save As window: browsing into folders works normally,
+      clicking Save prompts for a name (pre-filled with a sensible
+      default), and confirming actually writes the file to the chosen
+      folder and closes the picker
+- [ ] After a successful Save As, the Editor's title bar/status updates
+      to show the new path and the "unsaved changes" indicator clears
+- [ ] Save As picker's Cancel button (and Escape) closes it without
+      saving, and the Editor correctly shows "Save As cancelled"
+      instead of hanging
+- [ ] Clicking a file inside the Save As picker pre-fills its name when
+      you then click Save (rather than requiring it to be typed by hand)
+- [ ] Opening two Text Editor windows and triggering Save As on both
+      around the same time doesn't cross-wire which picker's result goes
+      to which Editor
+
 ## Step 7 — Text Editor, Explorer Menu + clipboard (2026-09-06)
 
 Confirmed working in-game: steps 1-6.
