@@ -1,5 +1,37 @@
 # Dev log
 
+## Step 4 — Resizable windows (2026-09-06)
+
+Confirmed working in-game: steps 1-3.
+
+Built:
+
+- Resize handle (`\`) in the bottom-right corner of every window,
+  dragging it resizes the window the same way dragging the title bar
+  moves it (see `self.resizeDrag` in `wm.lua`, mirrors `self.chromeDrag`)
+- Min size clamp (8 wide, 3 tall) and clamped to stay on-screen / above
+  the taskbar, same as dragging
+- Resizing now sends the window's app a `term_resize` event so it can
+  redraw at the new size — the About app already had a `term_resize`
+  branch waiting for this from step 1, it was just never reachable
+  before
+- Draw order changed so window content is blitted *before* chrome (title
+  bar, close button, resize handle), otherwise a resize handle sitting
+  on the app's own content row would get overwritten by that app's draw
+
+### Things to specifically check when testing
+
+- [ ] Dragging the `\` in a window's bottom-right corner resizes it live
+- [ ] About app's text reflows/redraws correctly as the window shrinks
+      and grows (no leftover garbage from the old size)
+- [ ] Can't shrink a window below a usable minimum size
+- [ ] Can't resize a window off the bottom of the screen (into/past the
+      taskbar) or off the right edge
+- [ ] Resize handle is still clickable/draggable after moving the window
+      with the title bar first (position tracking staying in sync)
+- [ ] On a pocket computer's small screen, the resize handle is still
+      findable/usable despite being a single cell
+
 ## Step 3 — Start menu (2026-09-06)
 
 Confirmed working in-game: steps 1-2.

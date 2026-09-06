@@ -8,6 +8,9 @@
 local wm = {}
 wm.__index = wm
 
+local MIN_WINDOW_W = 8
+local MIN_WINDOW_H = 3 -- 1 title row + at least 2 content rows
+
 -- Picks a color-safe value: falls back to mono-friendly colors on
 -- basic (non-color) computers and pocket computers.
 local function pickColor(isColor, colorValue, monoValue)
@@ -31,7 +34,8 @@ function wm.new(nativeTerm)
     self.nextId = 1
     self.running = false
     self.activeMouseWindow = nil -- window currently owning a mouse_click..mouse_up drag
-    self.chromeDrag = nil        -- {window=, offsetX=, offsetY=} when dragging a titlebar
+    self.chromeDrag = nil        -- {entry=, offsetX=, offsetY=} when dragging a titlebar
+    self.resizeDrag = nil        -- {entry=, startW=, startH=, startX=, startY=} when dragging the resize handle
 
     -- Start menu: set self.startMenuApps = {{id=,name=},...} and
     -- self.onLaunchApp = function(manager, app) ... end externally
@@ -89,6 +93,12 @@ function wm:closeWindow(entry)
     end
     if self.activeMouseWindow == entry then
         self.activeMouseWindow = nil
+    end
+    if self.chromeDrag and self.chromeDrag.entry == entry then
+        self.chromeDrag = nil
+    end
+    if self.resizeDrag and self.resizeDrag.entry == entry then
+        self.resizeDrag = nil
     end
 end
 
@@ -172,6 +182,14 @@ function wm:drawWindowChrome(entry, isFocused)
     t.setBackgroundColor(pickColor(self.isColor, colors.red, colors.black))
     t.setTextColor(pickColor(self.isColor, colors.white, colors.white))
     t.write("x")
+
+    -- resize handle, bottom-right corner of the window. Drawn after the
+    -- content (see draw()) so it sits on top of whatever the app wrote
+    -- to that cell.
+    t.setCursorPos(entry.x + entry.w - 1, entry.y + entry.h - 1)
+    t.setBackgroundColor(pickColor(self.isColor, colors.orange, colors.white))
+    t.setTextColor(pickColor(self.isColor, colors.white, colors.black))
+    t.write("\\")
 end
 
 function wm:drawTaskbar()
@@ -273,9 +291,11 @@ function wm:draw()
 
     for _, entry in ipairs(self.windows) do
         if not entry.minimized then
-            self:drawWindowChrome(entry, entry == self:focused())
             entry.win.setVisible(true)
             entry.win.redraw()
+            -- chrome (title bar, close button, resize handle) is drawn
+            -- after the content so it isn't covered by it
+            self:drawWindowChrome(entry, entry == self:focused())
         end
     end
 
@@ -357,6 +377,15 @@ function wm:handleMouseClick(button, px, py)
         return
     end
 
+    if px == entry.x + entry.w - 1 and py == entry.y + entry.h - 1 then
+        self.resizeDrag = {
+            entry = entry,
+            startW = entry.w, startH = entry.h,
+            startX = px, startY = py,
+        }
+        return
+    end
+
     -- content click: translate to window-local space and deliver
     self.activeMouseWindow = entry
     local localX = px - entry.x + 1
@@ -379,6 +408,23 @@ function wm:handleMouseDrag(button, px, py)
         return
     end
 
+    if self.resizeDrag then
+        local d = self.resizeDrag
+        local entry = d.entry
+        local newW = d.startW + (px - d.startX)
+        local newH = d.startH + (py - d.startY)
+        newW = math.max(MIN_WINDOW_W, math.min(newW, self.screenW - entry.x + 1))
+        newH = math.max(MIN_WINDOW_H, math.min(newH, self.taskbarY - entry.y))
+        if newW ~= entry.w or newH ~= entry.h then
+            entry.w, entry.h = newW, newH
+            entry.win.reposition(entry.x, entry.y + 1, entry.w, math.max(1, entry.h - 1))
+            if matchesFilter(entry, "term_resize") then
+                self:resumeWindow(entry, "term_resize")
+            end
+        end
+        return
+    end
+
     local entry = self.activeMouseWindow
     if entry and matchesFilter(entry, "mouse_drag") then
         local localX = px - entry.x + 1
@@ -390,6 +436,10 @@ end
 function wm:handleMouseUp(button, px, py)
     if self.chromeDrag then
         self.chromeDrag = nil
+        return
+    end
+    if self.resizeDrag then
+        self.resizeDrag = nil
         return
     end
     local entry = self.activeMouseWindow

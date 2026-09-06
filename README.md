@@ -7,16 +7,18 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Steps 1-2 (window manager, multiple windows) — tested in-game, working.**
-**Step 3 (Start menu) — done, pending in-game testing.**
+**Steps 1-3 (window manager, multiple windows, Start menu) — tested in-game, working.**
+**Step 4 (resizable windows) — done, pending in-game testing.**
 
-- Floating, draggable, closable windows with title bars
+- Floating, draggable, closable, resizable windows with title bars
 - Multiple windows at once; focusing a window (by clicking it, or
   launching a new one) always draws it on top of the others
 - Taskbar with per-window entries (click to focus, click again to
   minimize) and a Start button that opens a menu of installed apps
 - Installed apps are discovered at boot from `/ccios/apps/*/manifest.json`
   — no hardcoded app list anywhere in the kernel
+- Drag a window's bottom-right corner (`\`) to resize it; apps get a
+  `term_resize` event and can redraw at the new size
 - Works on color (Advanced) and mono (standard) screens
 - Apps are ordinary CraftOS programs (`term.*` / `os.pullEvent`) — no
   special API required to write one

@@ -85,11 +85,31 @@ an app from the store just means writing a new `/ccios/apps/<id>/`
 folder with a `manifest.json`, and it shows up in the Start menu on the
 next boot with no other code changes.
 
+## Resizing
+
+Every window's bottom-right cell is a resize handle (drawn as `\`,
+painted on top of the window's content each frame so the app can't
+cover it up). Dragging it works exactly like dragging the title bar —
+same `mouse_click` → `mouse_drag`* → `mouse_up` lifecycle, tracked in
+`self.resizeDrag` instead of `self.chromeDrag` — except it changes
+`entry.w`/`entry.h` and calls `entry.win.reposition(x, y, w, h)` instead
+of just moving `x`/`y`. Size is clamped to a minimum
+(`MIN_WINDOW_W`/`MIN_WINDOW_H`) and to stay above the taskbar and within
+the screen, the same way dragging is clamped to stay on-screen.
+
+Each time the size actually changes, the WM resumes that window's
+coroutine with a `term_resize` event (subject to the same filter-match
+rule as any other event) so the app can redraw at its new size. This
+doesn't rely on CraftOS's own `term_resize` event at all — the WM
+already drives each app's coroutine directly, so it just delivers the
+event itself the moment it changes the window's buffer size.
+
 ## What's intentionally deferred
 
-- Resizable windows (only draggable for now)
 - Surfacing app crash messages in the UI
-- Forwarding `term_resize` to individual apps
+- Forwarding the *real* `term_resize` (the physical screen resizing) to
+  individual apps — only resize-handle-triggered resizes are forwarded
+  right now
 - Pinning/searching in the Start menu, submenus, categories
 - Preventing duplicate launches (every click on a Start menu entry opens
   a new instance, same as clicking a taskbar icon in Windows without
