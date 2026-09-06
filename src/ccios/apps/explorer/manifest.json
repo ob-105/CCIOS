@@ -1,0 +1,12 @@
+{
+    "id": "explorer",
+    "name": "File Explorer",
+    "version": "0.1.0",
+    "author": "CCIOS",
+    "entry": "main.lua",
+    "description": "Browse files, launch .lua programs, drag-and-drop files in.",
+    "window": {
+        "width": 46,
+        "height": 18
+    }
+}

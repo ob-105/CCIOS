@@ -474,6 +474,10 @@ end
 
 local FOCUSED_ONLY = {
     key = true, key_up = true, char = true, paste = true, terminate = true,
+    -- drag-and-dropping a file onto the Minecraft window should land in
+    -- whatever the File Explorer (or similar) currently has open, i.e.
+    -- the focused window, not every open window
+    file_transfer = true,
 }
 
 function wm:dispatch(event, a, b, c, d)

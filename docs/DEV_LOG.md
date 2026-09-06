@@ -1,5 +1,46 @@
 # Dev log
 
+## Step 6 — File Explorer (2026-09-06)
+
+Confirmed working in-game: steps 1-5.
+
+Built:
+
+- `src/ccios/apps/explorer/` — third real app: browse directories
+  (`fs.list`/`fs.isDir`), navigate with arrow keys/PageUp/PageDown/
+  Enter/Backspace or mouse clicks, `..` entry to go up
+- Double-click detection (CraftOS has no such event; tracked manually as
+  "second click on the same entry within 0.5s")
+- Double-click or Enter on a `.lua` file launches it as a window via a
+  new `_G.ccios.launch(app)` (`boot.lua`'s cascaded/clamped placement
+  logic, now reusable by any app instead of just the Start menu)
+- Drag-and-drop: listens for CraftOS's `file_transfer` event and writes
+  dropped files into whatever directory Explorer currently has open
+- `wm.lua`: `file_transfer` added to the focused-only event set, so a
+  drop only ever lands in the Explorer window you actually have open and
+  focused, not every open window
+- Other file types / delete / rename / copy / move are explicitly *not*
+  implemented yet — see docs/ARCHITECTURE.md's deferred list for why
+  (need a text viewer and a confirmation-dialog primitive first)
+
+### Things to specifically check when testing
+
+- [ ] File Explorer appears in the Start menu and opens at `/`
+- [ ] Navigating into folders and back out (`..`, Backspace) works
+- [ ] Arrow keys / PageUp / PageDown move selection and scroll correctly
+      once the list is longer than the window
+- [ ] Single-click selects; a second click on the same item shortly after
+      opens it (double-click); clicking a *different* item right after a
+      first click does NOT count as a double-click on either
+- [ ] Double-click / Enter on a `.lua` file opens a new window running it
+- [ ] Drag-and-dropping a file onto the Minecraft window while Explorer
+      is open and focused copies it into the currently-open folder, and
+      it shows up in the list after
+- [ ] Dropping a file while Explorer is open but NOT focused (some other
+      window focused) does *not* silently go into Explorer's folder
+- [ ] Clicking a non-`.lua` file shows the "no viewer yet" message
+      instead of erroring
+
 ## Step 5 — System Monitor app (2026-09-06)
 
 Confirmed working in-game: steps 1-4.

@@ -1,15 +1,17 @@
 {
-    "version": "0.5.0",
+    "version": "0.6.0",
     "files": [
-        { "src": "src/startup.lua",                    "dest": "/startup.lua" },
-        { "src": "src/update.lua",                     "dest": "/update.lua" },
-        { "src": "src/ccios/kernel/wm.lua",             "dest": "/ccios/kernel/wm.lua" },
-        { "src": "src/ccios/kernel/boot.lua",           "dest": "/ccios/kernel/boot.lua" },
-        { "src": "src/ccios/kernel/updater.lua",        "dest": "/ccios/kernel/updater.lua" },
-        { "src": "src/ccios/kernel/apps.lua",           "dest": "/ccios/kernel/apps.lua" },
-        { "src": "src/ccios/apps/about/main.lua",       "dest": "/ccios/apps/about/main.lua" },
-        { "src": "src/ccios/apps/about/manifest.json",  "dest": "/ccios/apps/about/manifest.json" },
-        { "src": "src/ccios/apps/sysmon/main.lua",      "dest": "/ccios/apps/sysmon/main.lua" },
-        { "src": "src/ccios/apps/sysmon/manifest.json", "dest": "/ccios/apps/sysmon/manifest.json" }
+        { "src": "src/startup.lua",                      "dest": "/startup.lua" },
+        { "src": "src/update.lua",                       "dest": "/update.lua" },
+        { "src": "src/ccios/kernel/wm.lua",               "dest": "/ccios/kernel/wm.lua" },
+        { "src": "src/ccios/kernel/boot.lua",             "dest": "/ccios/kernel/boot.lua" },
+        { "src": "src/ccios/kernel/updater.lua",          "dest": "/ccios/kernel/updater.lua" },
+        { "src": "src/ccios/kernel/apps.lua",             "dest": "/ccios/kernel/apps.lua" },
+        { "src": "src/ccios/apps/about/main.lua",         "dest": "/ccios/apps/about/main.lua" },
+        { "src": "src/ccios/apps/about/manifest.json",    "dest": "/ccios/apps/about/manifest.json" },
+        { "src": "src/ccios/apps/sysmon/main.lua",        "dest": "/ccios/apps/sysmon/main.lua" },
+        { "src": "src/ccios/apps/sysmon/manifest.json",   "dest": "/ccios/apps/sysmon/manifest.json" },
+        { "src": "src/ccios/apps/explorer/main.lua",      "dest": "/ccios/apps/explorer/main.lua" },
+        { "src": "src/ccios/apps/explorer/manifest.json", "dest": "/ccios/apps/explorer/manifest.json" }
     ]
 }

@@ -96,6 +96,13 @@ end
 
 manager.onLaunchApp = launchApp
 
+-- Lets any app (e.g. the File Explorer opening a .lua file) launch an
+-- arbitrary program the same cascaded/clamped way the Start menu does,
+-- without needing to duplicate that placement logic itself.
+_G.ccios.launch = function(app)
+    launchApp(manager, app)
+end
+
 -- boot straight into a couple of About windows so multi-window overlap
 -- is visible immediately, same as before the Start menu existed
 for _, app in ipairs(installedApps) do

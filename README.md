@@ -7,8 +7,8 @@ Built one part at a time, bug-tested manually in-game after each step.
 
 ## Status
 
-**Steps 1-4 (window manager, multiple windows, Start menu, resizing) — tested in-game, working.**
-**Step 5 (System Monitor app) — done, pending in-game testing.**
+**Steps 1-5 (window manager, multiple windows, Start menu, resizing, System Monitor) — tested in-game, working.**
+**Step 6 (File Explorer) — done, pending in-game testing.**
 
 - Floating, draggable, closable, resizable windows with title bars
 - Multiple windows at once; focusing a window (by clicking it, or
@@ -22,8 +22,12 @@ Built one part at a time, bug-tested manually in-game after each step.
 - Works on color (Advanced) and mono (standard) screens
 - Apps are ordinary CraftOS programs (`term.*` / `os.pullEvent`) — no
   special API required to write one
-- "About CCIOS" and "System Monitor" (disk usage, watchdog headroom,
-  memory, open windows, peripherals) apps, both in the Start menu
+- "About CCIOS", "System Monitor" (disk usage, watchdog headroom,
+  memory, open windows, peripherals), and "File Explorer" apps, all in
+  the Start menu
+- File Explorer: browse folders, double-click (or Enter) a `.lua` file
+  to launch it as a window, drag-and-drop a file onto the Minecraft
+  window to copy it into whatever folder is currently open
 - Auto-updater: checks GitHub for a newer `manifest.json` on boot (asks
   before installing), plus a manual `update` shell command
 
@@ -76,6 +80,9 @@ src/
         manifest.json       -- app metadata
       sysmon/
         main.lua            -- System Monitor app
+        manifest.json       -- app metadata
+      explorer/
+        main.lua            -- File Explorer app
         manifest.json       -- app metadata
 docs/
   ARCHITECTURE.md
