@@ -1,0 +1,12 @@
+{
+    "id": "about",
+    "name": "About CCIOS",
+    "version": "0.1.0",
+    "author": "CCIOS",
+    "entry": "main.lua",
+    "description": "Shows information about this CCIOS installation.",
+    "window": {
+        "width": 36,
+        "height": 12
+    }
+}
