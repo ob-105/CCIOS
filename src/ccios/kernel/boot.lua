@@ -1,8 +1,58 @@
 -- CCIOS boot entry point.
 -- Loaded by /startup.lua once CCIOS is installed to /ccios on the
--- computer. Starts the window manager and opens the About app.
+-- computer. Optionally checks for updates, then starts the window
+-- manager and opens the About app.
 
 local CCIOS_ROOT = "/ccios"
+
+settings.define("ccios.autoUpdateCheck", {
+    description = "Check for CCIOS updates on boot",
+    default = true,
+    type = "boolean",
+})
+settings.load()
+
+local function checkForUpdatesOnBoot()
+    if not settings.get("ccios.autoUpdateCheck") then
+        return
+    end
+    if not http then
+        return -- no network access configured; silently skip
+    end
+
+    local ok, updater = pcall(dofile, CCIOS_ROOT .. "/kernel/updater.lua")
+    if not ok then
+        return
+    end
+
+    local hasUpdate, manifest, err = updater.checkForUpdate()
+    if err or not hasUpdate then
+        return
+    end
+
+    print(("CCIOS update available: %s -> %s"):format(
+        updater.getInstalledVersion() or "unknown", manifest.version))
+    io.write("Install now? (y/n) ")
+    local answer = read()
+    if answer:lower() ~= "y" then
+        return
+    end
+
+    print("Updating...")
+    local applyOk, applyErr = updater.applyManifest(manifest, function(dest)
+        print("  " .. dest)
+    end)
+    if not applyOk then
+        printError("Update failed: " .. tostring(applyErr))
+        print("Continuing with the current version.")
+        return
+    end
+
+    print("Updated. Rebooting...")
+    os.reboot()
+end
+
+checkForUpdatesOnBoot()
 
 local ok, wm = pcall(dofile, CCIOS_ROOT .. "/kernel/wm.lua")
 if not ok then

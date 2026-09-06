@@ -7,8 +7,15 @@ Built:
 - `src/ccios/kernel/wm.lua` — window manager (see ARCHITECTURE.md)
 - `src/ccios/kernel/boot.lua` — boots the WM and opens About, centered
 - `src/ccios/apps/about/main.lua` — first test app
-- `install.lua` — `wget run` bootstrap installer, pulls from
-  `raw.githubusercontent.com/ob-105/CCIOS/main/`
+- `install.lua` — `wget run` bootstrap installer, driven by `manifest.json`
+- `src/ccios/kernel/updater.lua` — shared install/update logic: fetches
+  `manifest.json`, compares its `version` against `/ccios/version.json`,
+  re-downloads everything listed if they differ. Used by `install.lua`,
+  `/update.lua` (manual command), and `boot.lua` (check-on-boot).
+- Auto-update-on-boot is opt-out via the CC `settings` API
+  (`ccios.autoUpdateCheck`, default on) and always asks for confirmation
+  before writing anything or rebooting — no silent overwrites of files a
+  tester might be mid-edit on.
 
 Not yet tested in-game — this was written and reasoned through without a
 CC:Tweaked runtime available in the dev environment (no local Lua/CraftOS
@@ -31,6 +38,12 @@ emulator was installed here). **Needs manual testing before step 2.**
       not the whole computer session
 - [ ] `install.lua` actually fetches and installs once pushed to GitHub
       `main`
+- [ ] Boot-time update check: shows up when `manifest.json` on `main` has
+      a newer `version` than `/ccios/version.json`, declines cleanly on
+      "n", applies + reboots cleanly on "y"
+- [ ] `update` command works the same way when run manually from the shell
+- [ ] With `http` disabled (or no network), boot doesn't hang or error —
+      it should just skip the check silently
 
 ### Known gaps going into step 2
 

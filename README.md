@@ -15,6 +15,8 @@ Built one part at a time, bug-tested manually in-game after each step.
 - Apps are ordinary CraftOS programs (`term.*` / `os.pullEvent`) — no
   special API required to write one
 - "About CCIOS" app running as the first window
+- Auto-updater: checks GitHub for a newer `manifest.json` on boot (asks
+  before installing), plus a manual `update` shell command
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it works and
 [docs/DEV_LOG.md](docs/DEV_LOG.md) for progress notes and open questions.
@@ -32,20 +34,36 @@ wget run https://raw.githubusercontent.com/ob-105/CCIOS/main/install.lua
 
 This installs `/startup.lua` and `/ccios/...`, then reboots into CCIOS.
 
-## Repo layout
+## Updating
+
+CCIOS checks GitHub for a newer version each boot and asks before
+installing (toggle with `settings.set("ccios.autoUpdateCheck", false)`
+then `settings.save()`). To check on demand, run:
 
 ```
-install.lua              -- bootstrap installer (wget run this in-game)
+update
+```
+
+Both paths compare against `manifest.json` on the `main` branch, so a
+push to `main` is what makes an update available to installs in the wild.
+
+## Repo layout
+
+```text
+manifest.json             -- version + file list; single source of truth for install/update
+install.lua                -- bootstrap installer (wget run this in-game)
 src/
-  startup.lua             -- installed as /startup.lua; hands off to the kernel
+  startup.lua               -- installed as /startup.lua; hands off to the kernel
+  update.lua                -- installed as /update.lua; manual update command
   ccios/
     kernel/
-      wm.lua              -- window manager
-      boot.lua            -- kernel entry point, launches the first app(s)
+      wm.lua                -- window manager
+      boot.lua              -- kernel entry point: update check, then launches app(s)
+      updater.lua           -- shared install/update logic (used by install.lua, update.lua, boot.lua)
     apps/
       about/
-        main.lua          -- About CCIOS app
-        manifest.json     -- app metadata
+        main.lua            -- About CCIOS app
+        manifest.json       -- app metadata
 docs/
   ARCHITECTURE.md
   DEV_LOG.md
